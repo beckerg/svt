@@ -1,21 +1,29 @@
 NAME
 
-dits - Data Integrity Test Tool
+svt - System/Storage Verification Tool
 
 SYNOPSIS
 
-dits -i [-HvX] [-o skip] [-S max] partition [nblocks]
-dits -t [gHnv] [-a naioreqs] [-b bps] [-C nprocs] [-E type:prob] [-I iter] [-o skip] [-r] [-S max] [-s min] [-T ttmax] partition
-dits -c [-HRv]  [-a naioreqs] [-o skip] [-r] [-S max] partition
-dits -D sfrom sto
-dits -d [-Hv] [-o skip] [-S max] partition [start [stop]]
-dits -h
-dits -V
+usage: svt [-cmv] [-C cfdir] [-i maxrecs] [-s statsecs] [-t maxsecs] testbed
+usage: svt -h
+usage: svt -V
+-C cfdir     specify the config file directory
+-c           check the testbed for errors
+-h           print this help list
+-m           use mmap
+-p maxprocs  maximum number of worker processes to use
+-i maxrecs   specify the size of the testbed (in records)
+-s statsecs  print status every statsecs seconds
+-t maxsecs   run in test mode for maxsecs seconds
+-V           print version
+-v           be verbose
+testbed      path to test bed
+
 
 DESCRIPTION
 
-dits is a tool for validating disk drivers, file systems, and
-lock managers. More than a simple exerciser, dits is able to
+svt is a tool for validating disk drivers, file systems, and
+lock managers. More than a simple exerciser, svt is able to
 verify that no detectable data integrity errors have occurred.
 
 The tool does its work in three mutually exclusive phases:
@@ -66,10 +74,10 @@ ttmax      maximum test mode run time in seconds
 
 EXAMPLES
 
-Typically, one runs dits over a raw device, but it
+Typically, one runs svt over a raw device, but it
 will run over a file in a file system. Given
 a raw device, one must first initialize the test
-bed in which dits will work. The larger the bed
+bed in which svt will work. The larger the bed
 the longer it takes to initialize and check.
 
 To initialize the test bed, choose some number
@@ -78,14 +86,14 @@ of sectors. For example, a test bed that is
 
 Given a logical volume named lvtest on AIX:
 
-$ dits -vi 262144 /dev/rlvtest
+$ svt -i 262144 /dev/rlvtest
 
 
 Next, run the test process. By default this
 process will fork and generate four test
 process that will access the test bed concurrently.
 
-$ dits -tv /dev/rlvtest
+$ svt -t 0 /dev/rlvtest
 
 
 This process will run until interrupted with <CTRL>-C,
@@ -95,7 +103,7 @@ constraints of the block swapping algorithm.
 Finally, kill the test process (with <CTRL-C> and verify
 the integrity of the test bed:
 
-$ dits -cv -a2 /dev/rlvtest
+$ svt -c /dev/rlvtest
 
 
 If successful, the check process will report
@@ -106,38 +114,28 @@ error messages to that effect and return a non-zero
 result.
 
 
-To use POSIX AIO, give dits the -a flag during the
-test process. The parameter to the -a flags is the
-maximum number of concurrent requests that you wish for
-the test process to have outstanding at any one time.
-Note: AIO mode currently only works with one test process
-because of a locking problem.
-
-$ dits -v -a32 /dev/rlvtest
-
-
-To use dits on a file system, first create a file
+To use svt on a file system, first create a file
 that will be used as the test bed:
 
-$ dd if=/dev/zero of=/tmp/testbed bs=1024k count=128
+$ touch /tmp/testbed
 
 
-Then simply run dits as before, but give it the name
+Then simply run svt as before, but give it the name
 of the file (/tmp/testbed) instead of /dev/rlvtest.
 
 DIAGNOSTICS
 
-The dits utility exits 0 on success, and non-zero
+The svt utility exits 0 on success, and non-zero
 if an error occurs.
 
 CAVEATS
 
 Be warned that because of file system caching and
-such, the behavior of running dits on a file in a
+such, the behavior of running svt on a file in a
 file system or on a block device will produce
 significantly different results than running
 on a raw device. In particular, if the machine
-crashes while dits is running in test mode, the
+crashes while svt is running in test mode, the
 test bed will most likely be corrupted beyond
 repair.
 
