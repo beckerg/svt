@@ -1,0 +1,10 @@
+#!/bin/sh -x
+
+#bsopts=--verbose
+bsopts=
+
+aclocal ${bsopts} || aclocal ${bsopts} || exit
+autoheader ${bsopts}|| autoheader --{bsopts} || exit
+automake --foreign --add-missing --copy ${bsopts} || \
+	automake --foreign --add-missing --copy --verbose || exit
+autoconf ${bsopts} || autoconf ${bsopts} || exit
