@@ -20,7 +20,7 @@ AC_CANONICAL_HOST
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
-AC_CHECK_HEADERS([aio.h errno.h fcntl.h stdlib.h string.h strings.h sys/file.h sys/param.h unistd.h])
+AC_CHECK_HEADERS([aio.h errno.h fcntl.h stdlib.h string.h strings.h sys/file.h sys/param.h unistd.h stdbool.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST

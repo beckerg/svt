@@ -32,64 +32,7 @@
  * @file qhash.c Hash APIs.
  */
 
-#if HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-#include <stdio.h>
-#include <ctype.h>
-
-#if STDC_HEADERS
-#include <stdlib.h>
-#include <stddef.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#else
-#if HAVE_STDLIB_H
-#include <stdlib.h>
-#endif
-#endif
-
-#if HAVE_STRING_H
-#if !STDC_HEADERS && HAVE_MEMORY_H
-#include <memory.h>
-#endif
-#include <string.h>
-#endif
-
-#if HAVE_STRINGS_H
-#include <strings.h>
-#endif
-
-#if HAVE_INTTYPES_H
-#include <inttypes.h>
-#else
-#if HAVE_STDINT_H
-#include <stdint.h>
-#endif
-#endif
-
-#if HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-
-#if HAVE_ERRNO_H
-#include <errno.h>
-#endif
-
-#include <assert.h>
-#include <signal.h>
-#include <sysexits.h>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <sys/param.h>
-#include <sys/wait.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
-#include <time.h>
-#include <sys/select.h>
-#include <math.h>
+#include "system.h"
 
 /**
  * Get 32-bit FNV1 hash.
