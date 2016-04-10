@@ -103,7 +103,7 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(man1dir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_svt_OBJECTS = main.$(OBJEXT) cf.$(OBJEXT) init.$(OBJEXT) \
 	check.$(OBJEXT) test.$(OBJEXT) rtck.$(OBJEXT) tb.$(OBJEXT) \
-	murmur3.$(OBJEXT)
+	murmur3.$(OBJEXT) clp.$(OBJEXT)
 svt_OBJECTS = $(am_svt_OBJECTS)
 svt_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -288,7 +288,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-svt_SOURCES = main.h main.c cf.h cf.c init.h init.c check.h check.c test.h test.c rtck.h rtck.c tb.h tb.c murmur3.h murmur3.c
+svt_SOURCES = main.h main.c cf.h cf.c init.h init.c check.h check.c test.h test.c rtck.h rtck.c tb.h tb.c murmur3.h murmur3.c clp.c
 
 # svt.1 was generated from svt.txt by txt2man:
 # $ txt2man -p -s 1 svt.txt > svt.1
@@ -383,6 +383,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/check.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/clp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/init.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/murmur3.Po@am__quote@

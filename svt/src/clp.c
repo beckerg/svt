@@ -1277,10 +1277,11 @@ clp_parsel(const char *line, clp_option_t *optionv, clp_posparam_t *paramv, char
     int optind;
     int argc;
     int rc;
+	int i;
 
     rc = clp_breakargs(line, NULL, errbuf, &argc, &argv);
     if (!rc) {
-        for (int i = 0; i < argc; ++i) {
+        for (i = 0; i < argc; ++i) {
             printf("%d %s\n", i, argv[i]);
         }
         rc = clp_parsev(argc, argv, optionv, paramv, errbuf, &optind);
