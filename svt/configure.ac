@@ -2,7 +2,7 @@
 #
 # Process this file with autoconf to produce a configure script.
 #
-AC_INIT([fsx],[1.0],[greg@codeconcepts.com])
+AC_INIT([svt],[1.0.0],[greg@codeconcepts.com])
 AC_PREREQ(2.61)
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_SRCDIR(src)
@@ -28,6 +28,7 @@ AC_TYPE_OFF_T
 AC_TYPE_PID_T
 AC_TYPE_SIZE_T
 AC_CHECK_TYPE([int64_t])
+AC_CHECK_TYPE([bool])
 
 # Checks for library functions.
 AC_FUNC_FORK

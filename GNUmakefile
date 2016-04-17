@@ -3,16 +3,9 @@
 
 SUBDIRS = svt
 
-#SVT_VERSION := $(shell sed -En 's/^ \* \$$Id: svt.c ([0-9]+) .*\$$/\1/p' svt/src/svt.c)
-#SVT_VERSION := 1.0.${SVT_VERSION}
-SVT_VERSION := 1.0.0
-
-#FST_DATE := $(shell sed -En 's/^ \* \$$Id: svt.c [0-9]+ ([0-9]+-[0-9]+-[0-9]+) .*\$$/\1/p' svt/src/svt.c)
-#SVT_DATE := ${SVT_DATE}T00:00:00
-
-SVT_DIST := svt-${SVT_VERSION}
-
-SVT_DEST := /usr/local/www/apache24/data/codeconcepts/
+SVT_VERSION	:= 1.0.0
+SVT_DIST	:= svt-${SVT_VERSION}
+SVT_DEST	:= /usr/local/www/apache24/data/codeconcepts/
 
 
 .DELETE_ON_ERROR:

@@ -2,3 +2,5 @@
 #
 
 SUBDIRS = src
+
+DEFS += -DSVT_VERSION=\"${PACKAGE_VERSION}\"

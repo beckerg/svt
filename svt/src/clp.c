@@ -917,12 +917,6 @@ clp_parsev_impl(clp_t *clp, int argc, char **argv, int *optindp)
                 return rc;
             }
         }
-        else if (o->result && !o->argname) {
-
-            /* Presume o->result points to an int and increment it.
-             */
-            clp_convert_inc(NULL, NULL, o->result);
-        }
     }
 
     if (optindp) {

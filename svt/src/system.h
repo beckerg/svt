@@ -71,7 +71,7 @@
 #include <errno.h>
 #endif
 
-#ifdef HAVE_STDBOOL_H
+#if HAVE_STDBOOL_H
 #include <stdbool.h>
 #endif
 

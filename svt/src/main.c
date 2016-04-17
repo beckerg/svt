@@ -36,7 +36,7 @@
 
 #define NDEBUG
 
-static char version[] = "$Id: main.c 52 2011-10-19 12:26:36Z greg $";
+static char version[] = SVT_VERSION;
 
 bool fcheck = false;
 

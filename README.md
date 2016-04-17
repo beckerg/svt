@@ -1,21 +1,25 @@
-$Id: README 15 2005-04-23 13:04:30Z greg $
+# svt
 
-DESCRIPTION
+## DESCRIPTION ##
+
     svt is a tool for validating disk drivers, file systems, and
     lock managers.  More than a simple exerciser, svt is able to
     detect if certain data integrity error occur.
 
 
-BUILDING
+## BUILDING ##
+
     To build, simply type ``./configure && make''.
 
 
-DIRECTORIES
+## DIRECTORIES ##
+
     src		The source code to dits.
     ports	Stuff for the FreeBSD ports system.
 
 
-CAVEATS
+## CAVEATS ##
+
     svt is still in the process of being fully converted to the
     autoconf system of configuration so not all facilities are
     currently being handled in the proper manner.
