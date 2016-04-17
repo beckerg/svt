@@ -36,62 +36,53 @@
 
 #define NDEBUG
 
-static char svnid[] = "$Id: main.c 52 2011-10-19 12:26:36Z greg $";
+static char version[] = "$Id: main.c 52 2011-10-19 12:26:36Z greg $";
 
-int verbosity = 0;
-char *progname;
+bool fcheck = false;
 
 FILE *dprint_stream;
 FILE *eprint_stream;
 
 
 clp_posparam_t posparamv[] = {
-    {
-        .name = "testbed",
-        .help = "path to the testbed",
-        .convert = clp_convert_string, .result = &cf.tb_path,
-    },
+    { .name = "testbed",
+      .help = "path to the testbed",
+      .convert = clp_convert_string, .result = &cf.tb_path, },
 
-    { .name = NULL }
+    CLP_PARAM_END
 };
 
 clp_option_t optionv[] = {
     CLP_OPTION_VERBOSE(&verbosity),
-    CLP_OPTION_VERSION(svnid),
+    CLP_OPTION_VERSION(version),
     CLP_OPTION_CONF(&cf.cf_dir),
     CLP_OPTION_HELP,
 
-    {
-        .optopt = 'i', .argname = "maxrecs",
-        .help = "specify the size of the testbed (in records)",
-        .convert = clp_convert_int, .result = &cf.tb_rec_max, .cvtarg = (void *)10,
-    },
+    { .optopt = 'c',
+      .help = "check the testbed for errors",
+      .convert = clp_convert_bool, .result = &fcheck, },
 
-    {
-        .optopt = 'p', .argname = "maxprocs",
-        .help = "specify the maximum number of worker process",
-        .convert = clp_convert_int, .result = &cf.cf_procs_max, .cvtarg = (void *)10,
-    },
+    { .optopt = 'i', .argname = "maxrecs",
+      .help = "specify the size of the testbed (in records)",
+      .convert = clp_convert_int, .result = &cf.tb_rec_max, },
 
-    {
-        .optopt = 'm',
-        .help = "use mmap",
-        .convert = clp_convert_int, .result = &cf.cf_mmap, .cvtarg = (void *)10,
-    },
+    { .optopt = 'm',
+      .help = "use mmap",
+      .convert = clp_convert_int, .result = &cf.cf_mmap, },
 
-    {
-        .optopt = 's', .argname = "statsecs",
-        .help = "print status every statsecs seconds",
-        .convert = clp_convert_int, .result = &cf.cf_status_interval, .cvtarg = (void *)10,
-    },
+    { .optopt = 'p', .argname = "maxprocs",
+      .help = "specify the maximum number of worker process",
+      .convert = clp_convert_int, .result = &cf.cf_procs_max, },
 
-    {
-        .optopt = 't', .argname = "maxsecs",
-        .help = "run in test mode for maxsecs seconds",
-        .convert = clp_convert_int, .result = &cf.cf_runtime_max, .cvtarg = (void *)10,
-    },
+    { .optopt = 's', .argname = "statsecs",
+      .help = "print status every statsecs seconds",
+      .convert = clp_convert_int, .result = &cf.cf_status_interval, },
 
-    { .optopt = 0 }
+    { .optopt = 't', .argname = "maxsecs",
+      .help = "run in test mode for maxsecs seconds",
+      .convert = clp_convert_int, .result = &cf.cf_runtime_max, },
+
+    CLP_OPTION_END
 };
 
 bool
