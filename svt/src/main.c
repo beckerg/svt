@@ -39,6 +39,7 @@
 static char version[] = SVT_VERSION;
 
 bool fcheck = false;
+char *cf_dir;
 
 FILE *dprint_stream;
 FILE *eprint_stream;
@@ -53,10 +54,13 @@ clp_posparam_t posparamv[] = {
 };
 
 clp_option_t optionv[] = {
-    CLP_OPTION_VERBOSE(&verbosity),
+    CLP_OPTION_VERBOSE(verbosity),
     CLP_OPTION_VERSION(version),
-    CLP_OPTION_CONF(&cf.cf_dir),
     CLP_OPTION_HELP,
+
+    { .optopt = 'C', .argname = "cfdir",
+      .help = "specify the config file directory",
+      .convert = clp_convert_string, .result = &cf_dir, },
 
     { .optopt = 'c',
       .help = "check the testbed for errors",
@@ -142,6 +146,8 @@ main(int argc, char **argv)
         exit(EX_USAGE);
     }
 #endif
+
+    cf.cf_dir = cf_dir;
 
     /* TODO: Run these in the order given on the command line...
      */
