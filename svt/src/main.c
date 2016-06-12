@@ -38,6 +38,9 @@
 
 static char version[] = SVT_VERSION;
 
+char *progname;
+int verbosity;
+
 bool fcheck = false;
 char *cf_dir;
 

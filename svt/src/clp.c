@@ -46,21 +46,18 @@
 //#define CLP_DEBUG
 
 
-__attribute__((weak)) char *progname;
-__attribute__((weak)) int verbosity;
-
 clp_posparam_t clp_posparam_none[] = {
     { .name = NULL }
 };
 
-/* dprint() prints a message if (lvl >= verbosity).  'verbosity' is
- * increased by one each time the -v option is given on the command
- * line.
+/* dprint() prints a message if (lvl >= clp_debug).
  */
 #ifdef CLP_DEBUG
+static int clp_debug = 3;
+
 #define dprint(lvl, ...)                                                \
 do {                                                                    \
-    if (verbosity >= (lvl)) {                                           \
+    if (clp_debug >= (lvl)) {                                           \
         clp_printf(stdout, __func__, __LINE__, __VA_ARGS__);            \
     }                                                                   \
 } while (0);
@@ -74,10 +71,9 @@ clp_printf(FILE *fp, const char *func, int line, const char *fmt, ...)
     int msglen;
     va_list ap;
 
+    msg[0] = '\000';
     if (func) {
         snprintf(msg, sizeof(msg), "%4d %-12s ", line, func);
-    } else {
-        snprintf(msg, sizeof(msg), "%s: ", progname);
     }
     msglen = strlen(msg);
 
@@ -159,7 +155,7 @@ clp_convert_string(void *cvtarg, const char *str, void *dst)
 }
 
 int
-clp_convert_file(void *cvtarg, const char *str, void *dst)
+clp_convert_fopen(void *cvtarg, const char *str, void *dst)
 {
     char *mode = cvtarg ? cvtarg : "r";
     FILE **result = dst;
@@ -168,10 +164,26 @@ clp_convert_file(void *cvtarg, const char *str, void *dst)
         errno = EINVAL;
         return EX_DATAERR;
     }
-    
+
     *result = fopen(str, mode);
 
     return *result ? 0 : EX_NOINPUT;
+}
+
+int
+clp_convert_open(void *cvtarg, const char *str, void *dst)
+{
+    int flags = cvtarg ? *(int *)cvtarg : O_RDONLY;
+    int *result = dst;
+
+    if (!result) {
+        errno = EINVAL;
+        return EX_DATAERR;
+    }
+
+    *result = open(str, flags);
+
+    return (*result >= 0) ? 0 : EX_NOINPUT;
 }
 
 int
@@ -570,7 +582,11 @@ clp_help_cmp(const void *lhs, const void *rhs)
 
     int lc = isupper((*l)->optopt) ? tolower((*l)->optopt) : (*l)->optopt;
     int rc = isupper((*r)->optopt) ? tolower((*r)->optopt) : (*r)->optopt;
-    
+
+    if (lc == rc) {
+        return (isupper((*l)->optopt) ? -1 : 1);
+    }
+
     return (lc - rc);
 }
 
@@ -633,6 +649,8 @@ clp_help(clp_option_t *opthelp)
      */
     width = 0;
     for (i = 0; i < optionc; ++i) {
+        int len = 0;
+
         option = optionv[i];
 
         if (!option->help) {
@@ -642,15 +660,13 @@ clp_help(clp_option_t *opthelp)
         clp_usage(clp, option, fp);
 
         if (option->argname) {
-            int len = strlen(option->argname) + 1;
-
-            if (longhelp && option->longopt) {
-                len += strlen(option->longopt) + 4;
-            }
-
-            if (len > width) {
-                width = len;
-            }
+            len += strlen(option->argname) + 1;
+        }
+        if (longhelp && option->longopt) {
+            len += strlen(option->longopt) + 4;
+        }
+        if (len > width) {
+            width = len;
         }
     }
 
@@ -814,10 +830,6 @@ clp_parsev_impl(clp_t *clp, int argc, char **argv, int *optindp)
             if (isprint(o->optopt)) {
                 *pc++ = o->optopt;
 
-                if (o->convert == clp_convert_bool) {
-                    o->argname = NULL;
-                }
-
                 if (o->argname) {
                     *pc++ = ':';
                 }
@@ -847,7 +859,7 @@ clp_parsev_impl(clp_t *clp, int argc, char **argv, int *optindp)
 
     paramv = clp->paramv;
 
-    char usehelp[] = ", use -c for help";
+    char usehelp[] = ", use -h for help";
     if (clp->opthelp > 0) {
         usehelp[7] = clp->opthelp;
     } else {
@@ -895,13 +907,22 @@ clp_parsev_impl(clp_t *clp, int argc, char **argv, int *optindp)
             return EX_USAGE;
         }
 
-        ++o->given;
         o->longidx = longidx;
+        o->optarg = optarg;
+        ++o->given;
+
         if (o->paramv) {
             paramv = o->paramv;
         }
 
         if (o->convert) {
+            if (o->given > 1 && o->result) {
+                if (o->convert == clp_convert_string) {
+                    free(*(void **)o->result);
+                    *(void **)o->result = NULL;
+                }
+            }
+
             rc = o->convert(o->cvtarg, optarg, o->result);
 
             if (rc) {
@@ -1049,13 +1070,19 @@ clp_parsev(int argc, char **argv,
         clp.basename = (clp.basename ? clp.basename + 1 : argv[0]);
     }
 
-    /* Validate options.
+    /* Validate options and initialize/reset from previous run.
      */
     if (optionv) {
         clp_option_t *o;
 
         for (o = optionv; o->optopt > 0; ++o) {
             o->clp = &clp;
+            o->given = 0;
+            o->optarg = NULL;
+
+            if (o->convert == clp_convert_bool || o->convert == clp_convert_incr) {
+                o->argname = NULL;
+            }
 
             if (o->argname && !o->convert) {
                 clp_eprint(&clp, "%s: option -%c requires an argument"

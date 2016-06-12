@@ -32,10 +32,33 @@
 #define CLP_OPTION_END      { .optopt = 0 }
 #define CLP_PARAM_END       { .name = NULL }
 
+/* List of conversion routines provided by clp.
+ *
+ * xtype        .result         .cvtarg
+ *
+ * bool         bool *
+ * char         char *
+ * u_char       u_char *
+ * short        short *
+ * u_short      u_short *
+ * int          int *
+ * u_int        u_int *
+ * long         long *
+ * u_long       u_long *
+ * intXX_t      intXX_t *
+ * u_intXX_t    u_intXX_t *
+ * string       char *
+ * fopen        FILE **         mode arg ptr to fopen()
+ * open         int *           flags arg ptr to open()
+ */
+
 #define CLP_OPTION(xtype, xoptopt, xargname, xexcl, xhelp)          \
     { CLP_OPTION_TMPL((xoptopt), #xargname, (xexcl), NULL,          \
                       clp_convert_ ## xtype, &(xargname), 0,        \
                       NULL, NULL, NULL, (xhelp)) }
+
+#define CLP_OPTION_VERBOSE(xverbose)                                \
+    CLP_OPTION(incr, 'v', xverbose, NULL, "increase verbosity")
 
 #define CLP_OPTION_HELP                                             \
     { CLP_OPTION_TMPL('h', NULL, "^v", "help",                      \
@@ -49,12 +72,6 @@
                       NULL, clp_version, clp_posparam_none,         \
                       "print version") }
 
-#define CLP_OPTION_VERBOSE(xverbose)                                \
-    { CLP_OPTION_TMPL('v', NULL, NULL, #xverbose,                   \
-                      clp_convert_incr, &(xverbose), 0,             \
-                      NULL, NULL, NULL,                             \
-                      "increase verbosity") }
-
 #define CLP_OPTION_DRYRUN(xdryrun)                                  \
     { CLP_OPTION_TMPL('n', NULL, NULL, #xdryrun,                    \
                       clp_convert_incr, &(xdryrun), 0,              \
@@ -63,7 +80,7 @@
 
 #define CLP_OPTION_CONF(xconf)                                      \
     { CLP_OPTION_TMPL('C', #xconf, NULL, #xconf,                    \
-                      clp_convert_file, &(xconf), 0,                \
+                      clp_convert_fopen, &(xconf), 0,               \
                       NULL, NULL, NULL,                             \
                       "specify a configuration file") }
 
@@ -90,8 +107,6 @@
 extern FILE *clp_dprint_fp;
 extern FILE *clp_eprint_fp;
 extern FILE *clp_vprint_fp;
-
-extern int verbosity;
 
 extern void clp_printf(FILE *fp , const char *file, int line, const char *fmt, ...);
 
@@ -143,8 +158,9 @@ typedef struct clp_option_s {
     /* The following fields are used by the option parser, whereas the above
      * fields are supplied by the user.
      */
-    struct clp_s       *clp;
+    struct clp_s       *clp;            // Not valid when parser returns
     int                 given;          // Count of time this option was given
+    const char         *optarg;         // optarg from getopt()
     int                 longidx;        // Index into cli->longopts[]
 } clp_option_t;
 
@@ -168,7 +184,8 @@ extern void clp_option_priv1_set(clp_option_t *option, void *priv1);
 extern clp_convert_t clp_convert_bool;
 
 extern clp_convert_t clp_convert_string;
-extern clp_convert_t clp_convert_file;
+extern clp_convert_t clp_convert_fopen;
+extern clp_convert_t clp_convert_open;
 extern clp_convert_t clp_convert_incr;
 
 extern clp_convert_t clp_convert_int;
