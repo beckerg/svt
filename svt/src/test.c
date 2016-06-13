@@ -188,8 +188,8 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
             ops->tb_verify(r1);
             ops->tb_verify(r2);
 
-            rtck_verify(r1->tr_hash, r1->tr_id);
-            rtck_verify(r2->tr_hash, r2->tr_id);
+            rtck_hash_verify(r1->tr_id, r1->tr_hash);
+            rtck_hash_verify(r2->tr_id, r2->tr_hash);
 
             r1->tr_id = id2 + i;
             r2->tr_id = id1 + i;
@@ -197,8 +197,8 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
             ops->tb_update(r1);
             ops->tb_update(r2);
 
-            rtck_put(r1->tr_hash, r1->tr_id);
-            rtck_put(r2->tr_hash, r2->tr_id);
+            rtck_hash_put(r1->tr_id, r1->tr_hash);
+            rtck_hash_put(r2->tr_id, r2->tr_hash);
         }
 
         worker->w_op = OP_PUT;
@@ -212,7 +212,7 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         worker->w_op = OP_WUNLOCK;
         rtck_wunlock(id2, range);
         rtck_wunlock(id1, range);
-        
+
         worker->w_swaps += 1;
         worker->w_recs += range;
         (void)gettimeofday(&worker->w_stop, NULL);
@@ -266,7 +266,7 @@ test_status(worker_t *worker_base)
         else {
             state = op2txt[worker->w_op];
         }
-        
+
         printf("%2d %6d %6s %3u %10lu %12lu %5ld %10.1lf %10.1lf %10.2lf\n",
                i, worker->w_pid, state, code, worker->w_swaps, worker->w_recs, secs,
                (double)worker->w_swaps / secs, (double)worker->w_recs / secs,
@@ -475,7 +475,7 @@ test(void)
     }
 
     test_status(worker_base);
-    
+
     (void)munmap(worker_base, worker_base_sz);
 
     ops->tb_close(xfd0);

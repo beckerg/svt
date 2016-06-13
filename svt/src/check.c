@@ -88,7 +88,7 @@ check(void)
         ops->tb_get(r, i, 1, xfd);
         ops->tb_verify(r);
 
-        rtck_verify(r->tr_hash, r->tr_id);
+        rtck_hash_verify(r->tr_id, r->tr_hash);
 
         if (cnts[r->tr_uniqid] < 128) {
             if (i == r->tr_uniqid) {

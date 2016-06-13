@@ -150,7 +150,7 @@ cf_load(void)
         }
         else {
             eprint("%s: ignoring invalid config variable name [%s] at line %d in %s\n",
-                   __func__, name, lineno, cf_path);
+                    __func__, name, lineno, cf_path);
         }
     }
 

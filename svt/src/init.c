@@ -88,7 +88,7 @@ init(void)
 
     cf_save();
     rtck_create();
-    
+
     dprint(1, "initializing %s with %u records...\n",
            cf.tb_path, cf.tb_rec_max);
 
@@ -103,7 +103,7 @@ init(void)
         ops->tb_init(r, i);
         ops->tb_put(r, 1, xfd);
 
-        rtck_put(r->tr_hash, r->tr_id);
+        rtck_hash_put(r->tr_id, r->tr_hash);
 
         ops->tb_close(xfd);
     }

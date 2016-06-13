@@ -119,6 +119,7 @@ rtck_open(void)
      * matches the number of records in the test bed.
      */
     if (sb.st_size != (cf.tb_rec_max * sizeof(*rtck_base))) {
+        eprint("%s: rtck file %s is corrupted\n", __func__, rtck_path);
         exit(EX_DATAERR);
     }
 
@@ -142,7 +143,7 @@ rtck_close(void)
 }
 
 void
-rtck_get(uint64_t *hash, uint32_t rec_id)
+rtck_hash_get(uint32_t rec_id, uint64_t *hash)
 {
     rtck_t *r;
 
@@ -156,7 +157,7 @@ rtck_get(uint64_t *hash, uint32_t rec_id)
 }
 
 void
-rtck_put(const uint64_t *hash, uint32_t rec_id)
+rtck_hash_put(uint32_t rec_id, const uint64_t *hash)
 {
     rtck_t *r;
 
@@ -170,7 +171,7 @@ rtck_put(const uint64_t *hash, uint32_t rec_id)
 }
 
 void
-rtck_verify(const uint64_t *hash, uint32_t rec_id)
+rtck_hash_verify(uint32_t rec_id, const uint64_t *hash)
 {
     rtck_t *r;
 
@@ -183,6 +184,35 @@ rtck_verify(const uint64_t *hash, uint32_t rec_id)
     assert(r->rtck_hash[1] == hash[1]);
 }
 
+void
+rtck_val_get(uint32_t rec_id, uint64_t *val)
+{
+    rtck_t *r;
+
+    assert(rec_id < cf.tb_rec_max);
+    assert(rtck_fd >= 0);
+
+    r = rtck_base + rec_id;
+
+    *val = r->rtck_val;
+}
+
+void
+rtck_val_put(uint32_t rec_id, uint64_t val)
+{
+    rtck_t *r;
+
+    assert(rec_id < cf.tb_rec_max);
+    assert(rtck_fd >= 0);
+
+    r = rtck_base + rec_id;
+
+    r->rtck_val = val;
+}
+
+/* Acquire an exclusive lock of all records over the given range
+ * starting with the given record ID.
+ */
 int
 rtck_wlock(uint32_t rec_id, int range)
 {
@@ -208,6 +238,9 @@ rtck_wlock(uint32_t rec_id, int range)
     return 0;
 }
 
+/* Release the exclusive lock of all records over the given range
+ * starting with the given record ID.
+ */
 int
 rtck_wunlock(uint32_t rec_id, int range)
 {
