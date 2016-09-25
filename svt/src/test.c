@@ -32,49 +32,78 @@
 #include "test.h"
 #include "main.h"
 
+#ifndef ulong
+typedef unsigned long ulong;
+#endif
+
 typedef void (*sigfunc_t)(int);
 
-static volatile int sigcnt = 0;
+static volatile sig_atomic_t sigxxx_cnt;
+static volatile sig_atomic_t sigint_cnt;
+static volatile sig_atomic_t sigchld_cnt;
+
 static char rng_state[256];
 
 typedef enum {
     OP_NULL,
-    OP_WLOCK,
-    OP_WUNLOCK,
-    OP_DEADLOCK,
+    OP_PAD1,
     OP_OPEN,
     OP_CLOSE,
-    OP_GET,
-    OP_PUT,
-    OP_SWAP,
+    OP_PAD2,
+    OP_PAD3,
+    OP_VERIFY,
+    OP_DEADLOCK,
+    OP_WLOCK1,
+    OP_WLOCK2,
+    OP_WUNLOCK1,
+    OP_WUNLOCK2,
+    OP_GET1,
+    OP_GET2,
+    OP_PUT1,
+    OP_PUT2,
 } op_t;
+
+/* Worker stats
+ */
+typedef struct {
+    ulong           s_gets;     // Number of gets/reads done by this worker
+    ulong           s_puts;     // Number of puts/writes done by this worker
+    ulong           s_recs;     // Number of records swapped by this worker
+} worker_stats_t;
 
 /* Worker state
  */
 typedef struct {
-    __attribute__((aligned(64)))
+    __attribute__((aligned(PAGE_SIZE)))
     pid_t           w_pid;      // The worker's pid
     struct timeval  w_start;
     struct timeval  w_stop;
-    u_long          w_swaps;    // Number of swaps done by this worker
-    u_long          w_recs;     // Number of records swapped by this worker
+
+    worker_stats_t  w_stats;
+    worker_stats_t  w_ostats;
 
     op_t            w_op;       // Current operation
-    int             w_exited;   // 'true' if worker exited
+    bool            w_exited;   // 'true' if worker exited
     int             w_status;   // wait3() status code
     struct rusage   w_rusage;
 } worker_t;
 
 static const char *op2txt[] = {
-    "init", "lock", "unlock", "deadlk", "open", "close", "get", "put", "swap",
+    "init", "pad1", "open", "close", "pad2", "pad3", "verify", "deadlk",
+    "lock1", "lock2", "unlock1", "unlock2", "get1", "get2", "put1", "put2"
 };
 
 /* Note that we received a signal.
  */
 RETSIGTYPE
-signal_isr(int sig)
+sigxxx_isr(int sig)
 {
-    ++sigcnt;
+    if (sig == SIGINT)
+        ++sigint_cnt;
+    else if (sig == SIGCHLD)
+        ++sigchld_cnt;
+    else
+        ++sigxxx_cnt;
 }
 
 /* Reliable signal.
@@ -99,12 +128,13 @@ signal_reliable(int signo, sigfunc_t func)
 #endif
     }
 
-    return sigaction(signo, &nact, (struct sigaction *)0);
+    return sigaction(signo, &nact, NULL);
 }
 
 static void
 test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
 {
+    worker_stats_t *stats;
     tb_rec_t *r1_base, *r2_base;
     time_t runtime_max;
     int i;
@@ -129,6 +159,8 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         dprint(3, "pid %d testing %s until interrupted...\n",
                worker->w_pid, cf.tb_path);
     }
+
+    stats = &worker->w_stats;
 
     while (1) {
         tb_fd_t *xfd1, *xfd2;
@@ -156,8 +188,9 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         }
 
         while (1) {
-            worker->w_op = OP_WLOCK;
+            worker->w_op = OP_WLOCK1;
             if (0 == rtck_wlock(id1, range)) {
+                worker->w_op = OP_WLOCK2;
                 if (0 == rtck_wlock(id2, range)) {
                     break;
                 }
@@ -175,11 +208,15 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         xfd1 = ops->tb_open(cf.tb_path, O_RDWR, id1);
         xfd2 = ops->tb_open(cf.tb_path, O_RDWR, id2);
 
-        worker->w_op = OP_GET;
+        worker->w_op = OP_GET1;
         ops->tb_get(r1_base, id1, range, xfd1);
+
+        worker->w_op = OP_GET2;
         ops->tb_get(r2_base, id2, range, xfd2);
 
-        worker->w_op = OP_SWAP;
+        stats->s_gets += 2;
+
+        worker->w_op = OP_VERIFY;
 
         for (i = 0; i < range; ++i) {
             tb_rec_t *r1 = (tb_rec_t *)((char *)r1_base + (i * cf.tb_rec_sz));
@@ -201,24 +238,29 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
             rtck_hash_put(r2->tr_id, r2->tr_hash);
         }
 
-        worker->w_op = OP_PUT;
+        worker->w_op = OP_PUT1;
         ops->tb_put(r1_base, range, xfd2);
+
+        worker->w_op = OP_PUT2;
         ops->tb_put(r2_base, range, xfd1);
+
+        stats->s_puts += 2;
 
         worker->w_op = OP_CLOSE;
         ops->tb_close(xfd2);
         ops->tb_close(xfd1);
 
-        worker->w_op = OP_WUNLOCK;
+        worker->w_op = OP_WUNLOCK1;
         rtck_wunlock(id2, range);
+
+        worker->w_op = OP_WUNLOCK2;
         rtck_wunlock(id1, range);
 
-        worker->w_swaps += 1;
-        worker->w_recs += range;
+        stats->s_recs += range;
         (void)gettimeofday(&worker->w_stop, NULL);
 
-        if (runtime_max > 0 || sigcnt > 0) {
-            if (worker->w_stop.tv_sec >= runtime_max || sigcnt > 0) {
+        if (runtime_max > 0 || sigint_cnt > 0) {
+            if (worker->w_stop.tv_sec >= runtime_max || sigint_cnt > 0) {
                 break;
             }
         }
@@ -231,47 +273,86 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
 }
 
 static void
-test_status(worker_t *worker_base)
+test_status(worker_t *worker)
 {
+    ulong tot_gets, tot_puts, tot_recs, tot_msecs;
+    ulong itv_gets, itv_puts;
+    struct timeval tv_diff;
+    ulong msecs;
     int i;
 
-    printf("\n%2s %6s %6s %3s %10s %12s %5s %10s %10s %10s\n",
-           "ID", "PID", "STATE", "RC", "SWAPS", "RECS", "SECS",
-           "SWAPS/SEC", "RECS/SEC", "MB/s");
+    if (fheaders) {
+        printf("\n%3s %6s %4s %3s %7s %7s %7s %10s %10s %10s\n",
+               "ID", "PID", "S", "C", "OP",
+               "iGETS", "iPUTS", "tGETS", "tPUTS", "MSECS");
+    }
 
-    for (i = 0; i < cf.cf_procs_max; ++i) {
-        worker_t *worker = worker_base + i;
-        time_t secs = worker->w_stop.tv_sec - worker->w_start.tv_sec;
-        const char *state = "???";
-        u_int code = 0;
+    tot_gets = tot_puts = tot_recs = tot_msecs = 0;
+    itv_gets = itv_puts = 0;
+
+    timersub(&worker->w_stop, &worker->w_start, &tv_diff);
+    msecs = tv_diff.tv_sec * 1000000 + tv_diff.tv_usec;
+    msecs /= 1000;
+
+    for (i = 0; i < cf.cf_jobs_max; ++i, ++worker) {
+        ulong gets, puts, recs;
+        worker_stats_t stats, *ostats;
+        const char *status;
+        uint code;
+
+        stats = worker->w_stats;
+
+        /* Sum total ops for all workers.
+         */
+        tot_gets += stats.s_gets;
+        tot_puts += stats.s_puts;
+        tot_recs += stats.s_recs;
+        tot_msecs += msecs;
+
+        ostats = &worker->w_ostats;
+
+        /* Compute interval ops for this worker.
+         */
+        gets = stats.s_gets - ostats->s_gets;
+        puts = stats.s_puts - ostats->s_puts;
+        recs = stats.s_recs - ostats->s_recs;
+
+        /* Sum total ops for all workers for this interval.
+         */
+        itv_gets += gets;
+        itv_puts += puts;
+
+        *ostats = stats;
+
+        if (verbosity < 1)
+            continue;
+
+        status = "run";
+        code = 0;
 
         if (worker->w_exited) {
             if (WIFEXITED(worker->w_status)) {
                 code = WEXITSTATUS(worker->w_status);
-                state = "exited";
-            }
-            else if (WIFSTOPPED(worker->w_status)) {
-                code = WSTOPSIG(worker->w_status);
-                state = "stop";
-            }
-            else if (WIFSIGNALED(worker->w_status)) {
+                status = "exit";
+            } else if (WIFSIGNALED(worker->w_status)) {
                 code = WTERMSIG(worker->w_status);
-                state = "signal";
+                status = "sig";
 
                 if (WCOREDUMP(worker->w_status)) {
-                    state = "core";
+                    status = "core";
                 }
             }
         }
-        else {
-            state = op2txt[worker->w_op];
-        }
 
-        printf("%2d %6d %6s %3u %10lu %12lu %5ld %10.1lf %10.1lf %10.2lf\n",
-               i, worker->w_pid, state, code, worker->w_swaps, worker->w_recs, secs,
-               (double)worker->w_swaps / secs, (double)worker->w_recs / secs,
-               ((double)(worker->w_recs * sizeof(tb_rec_t)) / secs) / (1024 * 1024));
+        printf("%3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld\n",
+               i, worker->w_pid, status, code, op2txt[worker->w_op],
+               gets, puts, stats.s_gets, stats.s_puts, msecs);
     }
+
+    printf("%3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld\n",
+           "-", getpid(), "-", 0, "total",
+           itv_gets, itv_puts, tot_gets, tot_puts,
+           tot_msecs / cf.cf_jobs_max);
 }
 
 void
@@ -283,6 +364,7 @@ test(void)
     struct stat sb;
     tb_ops_t *ops;
     tb_fd_t *xfd0;
+    int nworkers;
     tb_rec_t *r;
     int oflags;
     ssize_t cc;
@@ -291,22 +373,13 @@ test(void)
     int rc;
     int i;
 
-#if HAVE_ALARM
-    int sig;
+    struct timespec timeout = { 0, 0 };
+    struct timespec *timeoutp;
+    sigset_t sigmask_block;
+    sigset_t sigmask_orig;
+    struct pollfd fds[2];
 
-    /* TODO: Is there a param for the max number of signals?
-     */
-    for (sig = 0; sig < SIGRTMIN; ++sig) {
-        (void)signal_reliable(sig, signal_isr);
-    }
-#if defined(AIX4) || defined(AIX5) || defined(AIX6)
-    (void)signal_reliable(SIGDANGER, sigHandler);
-#endif
-#else
-#error TODO - this implementation does not support alarm
-#endif /* HAVE_ALARM */
-
-    (void)initstate(1, rng_state, sizeof(rng_state));
+    initstate(time(NULL), rng_state, sizeof(rng_state));
 
     cf_load();
     rtck_open();
@@ -343,15 +416,11 @@ test(void)
 
     /* Open the test bed.
      */
-    xfd0 = ops->tb_open(cf.tb_path, O_RDWR, 0);
+    xfd0 = ops->tb_open(cf.tb_path, O_RDWR | O_DIRECT, 0);
 
-    worker_base_sz = sizeof(*worker_base) * cf.cf_procs_max;
+    worker_base_sz = sizeof(*worker_base) * cf.cf_jobs_max;
 
     int flags = MAP_ANON | MAP_SHARED;
-
-#ifdef MAP_ALIGNED
-    flags |= MAP_ALIGNED(12);
-#endif
 
     worker_base = mmap(NULL, worker_base_sz, PROT_READ | PROT_WRITE, flags, -1, 0);
     if (worker_base == MAP_FAILED) {
@@ -359,9 +428,19 @@ test(void)
         exit(EX_OSERR);
     }
 
-    bzero(worker_base, worker_base_sz);
+    if ((uintptr_t)worker_base & (PAGE_SIZE - 1)) {
+        eprint("%s: mmap returned non-page aligned address: %p\n", worker_base);
+    }
+    if (sizeof(*worker_base) & (PAGE_SIZE - 1)) {
+        eprint("%s: sizeof(worker_t) not page aligned: %zu\n", sizeof(*worker_base));
+    }
 
-    for (i = 0; i < cf.cf_procs_max; ++i) {
+    signal_reliable(SIGINT, sigxxx_isr);
+    signal_reliable(SIGCHLD, sigxxx_isr);
+
+    nworkers = 0;
+
+    for (i = 0; i < cf.cf_jobs_max; ++i) {
         worker_t *worker = worker_base + i;
 
         pid = fork();
@@ -372,31 +451,31 @@ test(void)
             break;
 
         case 0:
+            initstate(getpid(), rng_state, sizeof(rng_state));
             test_worker(ops, range_max, worker);
             _exit(0);
 
         default:
             worker->w_pid = pid;
+            ++nworkers;
             break;
         }
     }
 
-    struct timespec timeout = { 0, 0 };
-    struct timespec *timeoutp;
-    sigset_t sigmask_none;
-    sigset_t sigmask_all;
-    fd_set rfds;
-    int fdin;
+    sigemptyset(&sigmask_block);
+    sigaddset(&sigmask_block, SIGINT);
+    sigaddset(&sigmask_block, SIGCHLD);
 
+    sigprocmask(SIG_BLOCK, &sigmask_block, &sigmask_orig);
+
+    timeout.tv_sec = cf.cf_status_interval;
+    timeout.tv_nsec = 0;
     timeoutp = (cf.cf_status_interval > 0) ? &timeout : NULL;
-    (void)sigemptyset(&sigmask_none);
-    (void)sigfillset(&sigmask_all);
-    FD_ZERO(&rfds);
-    fdin = STDIN_FILENO;
 
-    sigprocmask(SIG_BLOCK, &sigmask_all, NULL);
+    fds[0].fd = STDIN_FILENO;
+    fds[0].events = POLLIN;
 
-    while (1) {
+    while (nworkers > 0) {
         struct rusage rusage;
         int status;
         int nfds;
@@ -405,66 +484,60 @@ test(void)
         /* First, gather status from all children who have something
          * to report, but don't block in wait3().
          */
-        pid = wait3(&status, WNOHANG, &rusage);
+        if (sigchld_cnt > 0) {
+            pid = wait3(&status, WNOHANG, &rusage);
 
-        if (pid > 0) {
-            dprint(3, "reaped child %d, status %x\n", pid, status);
+            if (pid > 0) {
+                dprint(2, "reaped child %d, status 0x%x\n", pid, status);
 
-            for (i = 0; i < cf.cf_procs_max; ++i) {
-                worker_t *worker = worker_base + i;
+                for (i = 0; i < cf.cf_jobs_max; ++i) {
+                    worker_t *worker = worker_base + i;
 
-                if (worker->w_pid == pid) {
-                    worker->w_status = status;
-                    worker->w_rusage = rusage;
+                    if (worker->w_pid == pid) {
+                        worker->w_status = status;
+                        worker->w_rusage = rusage;
 
-                    if (WIFEXITED(status)) {
-                        worker->w_exited = 1;
+                        if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                            worker->w_exited = true;
+                            --nworkers;
+                        }
+                        break;
                     }
-                    break;
                 }
+            } else if (pid == 0) {
+                sigchld_cnt = 0; // All zombies reaped
             }
+            else if (pid == -1) {
+                if (errno == ECHILD) {
+                    break; // All children have exited
+                }
+
+                eprint("%s: wait3(): %s\n", __func__, strerror(errno));
+                sleep(1);
+            }
+
             continue;
         }
-        else if (pid == 0) {
-            sigcnt = 0; // wait3() would have blocked...
-        }
-        else if (errno == ECHILD) {
-            break; // No more children
-        }
-        else {
-            eprint("%s: wait3(): %s\n", __func__, strerror(errno));
-            sleep(1);
-            continue;
-        }
 
-        if (fdin >= 0) {
-            FD_SET(fdin, &rfds);
-        }
-
-        if (timeoutp) {
-            timeoutp->tv_sec = cf.cf_status_interval;
-            timeoutp->tv_nsec = 0;
-        }
-
-        /* Wait in pselect until the timer expires or we catch a signal.
+        /* Wait in ppoll() until the timer expires or we catch a signal.
          */
-        nfds = pselect(1, &rfds, NULL, NULL, timeoutp, &sigmask_none);
+        nfds = ppoll(fds, 1, timeoutp, &sigmask_orig);
 
         if (nfds == 0) {
             test_status(worker_base);
         }
         else if (nfds > 0) {
-            if (fdin >= 0 && FD_ISSET(fdin, &rfds)) {
+            if (fds[0].revents & POLLIN) {
                 char buf[32];
                 ssize_t cc;
 
-                cc = read(fdin, buf, sizeof(buf));
+                cc = read(fds[0].fd, buf, sizeof(buf));
                 if (cc > 0) {
                     test_status(worker_base);
                 }
                 else if (cc == 0) {
-                    FD_CLR(fdin, &rfds);
-                    fdin = -1;
+                    kill(getpid(), SIGINT);
+                    fds[0].fd = -1;
                 }
                 else {
                     eprint("%s: read: %s\n", __func__, strerror(errno));
@@ -474,9 +547,11 @@ test(void)
         }
     }
 
+    sigprocmask(SIG_SETMASK, &sigmask_orig, NULL);
+
     test_status(worker_base);
 
-    (void)munmap(worker_base, worker_base_sz);
+    munmap(worker_base, worker_base_sz);
 
     ops->tb_close(xfd0);
     rtck_close();

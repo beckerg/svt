@@ -41,6 +41,7 @@ static char version[] = SVT_VERSION;
 char *progname;
 int verbosity;
 
+bool fheaders = true;
 bool fcheck = false;
 char *cf_dir;
 
@@ -69,6 +70,10 @@ clp_option_t optionv[] = {
       .help = "check the testbed for errors",
       .convert = clp_convert_bool, .result = &fcheck, },
 
+    { .optopt = 'H',
+      .help = "suppress headers",
+      .convert = clp_convert_bool, .result = &fheaders, },
+
     { .optopt = 'i', .argname = "maxrecs",
       .help = "specify the size of the testbed (in records)",
       .convert = clp_convert_int, .result = &cf.tb_rec_max, },
@@ -77,9 +82,9 @@ clp_option_t optionv[] = {
       .help = "use mmap",
       .convert = clp_convert_int, .result = &cf.cf_mmap, },
 
-    { .optopt = 'p', .argname = "maxprocs",
-      .help = "specify the maximum number of worker process",
-      .convert = clp_convert_int, .result = &cf.cf_procs_max, },
+    { .optopt = 'j', .argname = "maxjobs",
+      .help = "specify the maximum number of worker processes",
+      .convert = clp_convert_int, .result = &cf.cf_jobs_max, },
 
     { .optopt = 's', .argname = "statsecs",
       .help = "print status every statsecs seconds",
@@ -136,7 +141,7 @@ main(int argc, char **argv)
     argv += optind;
 
     if (argc < 1) {
-        eprint("mandatory arguments required, use `-h' for help\n");
+        eprint("insufficient arguments for mandatory parameters, use `-h' for help\n");
         exit(EX_USAGE);
     } else if (argc > 1) {
         eprint("extraneous arguments detected, use `-h' for help\n");
@@ -152,8 +157,6 @@ main(int argc, char **argv)
 
     cf.cf_dir = cf_dir;
 
-    /* TODO: Run these in the order given on the command line...
-     */
     if (given('i'))
         init();
 

@@ -12,7 +12,7 @@ AM_INIT_AUTOMAKE
 AC_SYS_LARGEFILE
 
 # Checks for programs.
-AC_PROG_CC
+AC_PROG_CC([cc])
 AC_CANONICAL_HOST
 
 # Checks for libraries.

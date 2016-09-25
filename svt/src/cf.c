@@ -157,14 +157,14 @@ cf_load(void)
     if (cf.cf_runtime_max < 0) {
         cf.cf_runtime_max = 0;
     }
-    if (cf.cf_procs_max < 1) {
-        cf.cf_procs_max = 1;
+    if (cf.cf_jobs_max < 1) {
+        cf.cf_jobs_max = 1;
     }
 
     fprintf(fp, "tb_rec_max         %u\n", cf.tb_rec_max);
     fprintf(fp, "tb_rec_sz          %u\n", cf.tb_rec_sz);
     fprintf(fp, "cf_runtime_max     %ld\n", cf.cf_runtime_max);
-    fprintf(fp, "cf_procs_max       %u\n", cf.cf_procs_max);
+    fprintf(fp, "cf_jobs_max        %u\n", cf.cf_jobs_max);
     fprintf(fp, "cf_status_interval %u\n", cf.cf_status_interval);
 
     assert(cf.tb_rec_max > 0);

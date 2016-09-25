@@ -87,7 +87,7 @@
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include <sys/time.h>
-#include <sys/select.h>
+#include <sys/poll.h>
 #include <math.h>
 
 #endif /* SYSTEM_H */
