@@ -46,11 +46,11 @@ static char rng_state[256];
 
 typedef enum {
     OP_NULL,
-    OP_PAD1,
+    OP_LOOP,
+    OP_DONE,
+    OP_PAD,
     OP_OPEN,
     OP_CLOSE,
-    OP_PAD2,
-    OP_PAD3,
     OP_VERIFY,
     OP_DEADLOCK,
     OP_WLOCK1,
@@ -89,7 +89,7 @@ typedef struct {
 } worker_t;
 
 static const char *op2txt[] = {
-    "init", "pad1", "open", "close", "pad2", "pad3", "verify", "deadlk",
+    "init", "loop", "done", "pad", "open", "close", "verify", "deadlk",
     "lock1", "lock2", "unlock1", "unlock2", "get1", "get2", "put1", "put2"
 };
 
@@ -117,16 +117,7 @@ signal_reliable(int signo, sigfunc_t func)
 
     nact.sa_handler = func;
     sigemptyset(&nact.sa_mask);
-
-    if (SIGALRM == signo || SIGINT == signo) {
-#ifdef SA_INTERRUPT
-        nact.sa_flags |= SA_INTERRUPT;
-#endif
-    } else {
-#ifdef SA_RESTART
-        nact.sa_flags |= SA_RESTART;
-#endif
-    }
+    nact.sa_flags |= SA_RESTART;
 
     return sigaction(signo, &nact, NULL);
 }
@@ -259,12 +250,16 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         stats->s_recs += range;
         (void)gettimeofday(&worker->w_stop, NULL);
 
+        worker->w_op = OP_LOOP;
+
         if (runtime_max > 0 || sigint_cnt > 0) {
             if (worker->w_stop.tv_sec >= runtime_max || sigint_cnt > 0) {
                 break;
             }
         }
     }
+
+    worker->w_op = OP_DONE;
 
     (void)gettimeofday(&worker->w_stop, NULL);
 
@@ -273,51 +268,51 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
 }
 
 static void
-test_status(worker_t *worker)
+test_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start)
 {
-    ulong tot_gets, tot_puts, tot_recs, tot_msecs;
-    ulong itv_gets, itv_puts;
-    struct timeval tv_diff;
+    ulong tot_gets, tot_puts, tot_msecs;
+    ulong itv_gets, itv_puts, itv_msecs;
+    struct timeval tv_now, tv_diff;
     ulong msecs;
     int i;
 
     if (fheaders) {
-        printf("\n%3s %6s %4s %3s %7s %7s %7s %10s %10s %10s\n",
+        printf("\n%3s %6s %4s %3s %7s %7s %7s %10s %10s %10s %10s\n",
                "ID", "PID", "S", "C", "OP",
-               "iGETS", "iPUTS", "tGETS", "tPUTS", "MSECS");
+               "iGETS", "iPUTS", "tGETS", "tPUTS", "MSECS", "EPOCH");
     }
 
-    tot_gets = tot_puts = tot_recs = tot_msecs = 0;
+    tot_gets = tot_puts = 0;
     itv_gets = itv_puts = 0;
 
-    timersub(&worker->w_stop, &worker->w_start, &tv_diff);
-    msecs = tv_diff.tv_sec * 1000000 + tv_diff.tv_usec;
-    msecs /= 1000;
+    gettimeofday(&tv_now, NULL);
+    timersub(&tv_now, tv_start, &tv_diff);
+    itv_msecs = tv_diff.tv_sec * 1000000 + tv_diff.tv_usec;
+    itv_msecs /= 1000;
+
+    timersub(&tv_now, tv_tzero, &tv_diff);
+    tot_msecs = tv_diff.tv_sec * 1000000 + tv_diff.tv_usec;
+    tot_msecs /= 1000;
 
     for (i = 0; i < cf.cf_jobs_max; ++i, ++worker) {
-        ulong gets, puts, recs;
         worker_stats_t stats, *ostats;
         const char *status;
+        ulong gets, puts;
         uint code;
-
-        stats = worker->w_stats;
 
         /* Sum total ops for all workers.
          */
+        stats = worker->w_stats;
         tot_gets += stats.s_gets;
         tot_puts += stats.s_puts;
-        tot_recs += stats.s_recs;
-        tot_msecs += msecs;
-
-        ostats = &worker->w_ostats;
 
         /* Compute interval ops for this worker.
          */
+        ostats = &worker->w_ostats;
         gets = stats.s_gets - ostats->s_gets;
         puts = stats.s_puts - ostats->s_puts;
-        recs = stats.s_recs - ostats->s_recs;
 
-        /* Sum total ops for all workers for this interval.
+        /* Sum interval ops for all workers for this interval.
          */
         itv_gets += gets;
         itv_puts += puts;
@@ -344,20 +339,22 @@ test_status(worker_t *worker)
             }
         }
 
-        printf("%3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld\n",
+        printf("%3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
                i, worker->w_pid, status, code, op2txt[worker->w_op],
-               gets, puts, stats.s_gets, stats.s_puts, msecs);
+               gets, puts, stats.s_gets, stats.s_puts, itv_msecs,
+               worker->w_stop.tv_sec);
     }
 
-    printf("%3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld\n",
+    printf("%3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
            "-", getpid(), "-", 0, "total",
-           itv_gets, itv_puts, tot_gets, tot_puts,
-           tot_msecs / cf.cf_jobs_max);
+           itv_gets, itv_puts, tot_gets, tot_puts, tot_msecs,
+           tv_now.tv_sec);
 }
 
 void
 test(void)
 {
+    struct timeval tv_tzero, tv_next, tv_now, tv_kbd, tv_interval;
     size_t worker_base_sz;
     worker_t *worker_base;
     u_int range_max;
@@ -373,7 +370,7 @@ test(void)
     int rc;
     int i;
 
-    struct timespec timeout = { 0, 0 };
+    struct timespec ts_interval = { 0, 0 };
     struct timespec *timeoutp;
     sigset_t sigmask_block;
     sigset_t sigmask_orig;
@@ -438,6 +435,12 @@ test(void)
     signal_reliable(SIGINT, sigxxx_isr);
     signal_reliable(SIGCHLD, sigxxx_isr);
 
+    setpriority(PRIO_PROCESS, 0, -10);
+
+    gettimeofday(&tv_tzero, NULL);
+    tv_next = tv_tzero;
+    tv_kbd = tv_tzero;
+
     nworkers = 0;
 
     for (i = 0; i < cf.cf_jobs_max; ++i) {
@@ -451,6 +454,7 @@ test(void)
             break;
 
         case 0:
+            setpriority(PRIO_PROCESS, 0, -5);
             initstate(getpid(), rng_state, sizeof(rng_state));
             test_worker(ops, range_max, worker);
             _exit(0);
@@ -468,9 +472,9 @@ test(void)
 
     sigprocmask(SIG_BLOCK, &sigmask_block, &sigmask_orig);
 
-    timeout.tv_sec = cf.cf_status_interval;
-    timeout.tv_nsec = 0;
-    timeoutp = (cf.cf_status_interval > 0) ? &timeout : NULL;
+    tv_interval.tv_sec = cf.cf_status_interval;
+    tv_interval.tv_usec = 0;
+    timeoutp = (cf.cf_status_interval > 0) ? &ts_interval : NULL;
 
     fds[0].fd = STDIN_FILENO;
     fds[0].events = POLLIN;
@@ -519,12 +523,26 @@ test(void)
             continue;
         }
 
+        if (timeoutp) {
+            struct timeval tv_diff;
+
+            gettimeofday(&tv_now, NULL);
+
+            while (timercmp(&tv_next, &tv_now, <)) {
+                timeradd(&tv_next, &tv_interval, &tv_next);
+            }
+            timersub(&tv_next, &tv_now, &tv_diff);
+
+            timeoutp->tv_sec = tv_diff.tv_sec;
+            timeoutp->tv_nsec = tv_diff.tv_usec * 1000;
+        }
+
         /* Wait in ppoll() until the timer expires or we catch a signal.
          */
         nfds = ppoll(fds, 1, timeoutp, &sigmask_orig);
 
         if (nfds == 0) {
-            test_status(worker_base);
+            test_status(worker_base, &tv_tzero, &tv_now);
         }
         else if (nfds > 0) {
             if (fds[0].revents & POLLIN) {
@@ -533,7 +551,8 @@ test(void)
 
                 cc = read(fds[0].fd, buf, sizeof(buf));
                 if (cc > 0) {
-                    test_status(worker_base);
+                    test_status(worker_base, &tv_tzero, &tv_kbd);
+                    gettimeofday(&tv_kbd, NULL);
                 }
                 else if (cc == 0) {
                     kill(getpid(), SIGINT);
@@ -547,9 +566,10 @@ test(void)
         }
     }
 
-    sigprocmask(SIG_SETMASK, &sigmask_orig, NULL);
+    gettimeofday(&tv_now, NULL);
+    test_status(worker_base, &tv_tzero, &tv_now);
 
-    test_status(worker_base);
+    sigprocmask(SIG_SETMASK, &sigmask_orig, NULL);
 
     munmap(worker_base, worker_base_sz);
 

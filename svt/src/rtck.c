@@ -219,6 +219,7 @@ rtck_wlock(uint32_t rec_id, int range)
     struct flock lk;
     int rc;
 
+  retry:
     bzero(&lk, sizeof(lk));
     lk.l_start = rec_id * sizeof(rtck_t);
     lk.l_len = range * sizeof(rtck_t);
@@ -232,6 +233,10 @@ rtck_wlock(uint32_t rec_id, int range)
         }
 
         eprint("%s: fcntl(%d, F_SETLK): %s\n", __func__, rtck_fd, strerror(errno));
+
+        if (errno == EINTR) {
+            goto retry;
+        }
         exit(EX_OSERR);
     }
 
@@ -247,6 +252,7 @@ rtck_wunlock(uint32_t rec_id, int range)
     struct flock lk;
     int rc;
 
+  retry:
     bzero(&lk, sizeof(lk));
     lk.l_start = rec_id * sizeof(rtck_t);
     lk.l_len = range * sizeof(rtck_t);
@@ -256,6 +262,10 @@ rtck_wunlock(uint32_t rec_id, int range)
     rc = fcntl(rtck_fd, F_SETLK, &lk);
     if (rc) {
         eprint("%s: fcntl(%d, F_SETLK): %s\n", __func__, rtck_fd, strerror(errno));
+
+        if (errno == EINTR) {
+            goto retry;
+        }
         exit(EX_OSERR);
     }
 
