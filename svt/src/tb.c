@@ -85,21 +85,33 @@ static tb_ops_t tb_ops_dev = {
 
 
 tb_ops_t *
-tb_find(const char *type)
+tb_find(const char *path)
 {
-    assert(type);
+    struct stat sb;
+    int rc;
 
-    if (0 == strcmp(type, "dir")) {
+    assert(path);
+
+    rc = stat(path, &sb);
+    if (rc) {
+        eprint("%s: stat(%s): %s\n", __func__, path, strerror(errno));
+        exit(EX_USAGE);
+    }
+
+    if (S_ISDIR(sb.st_mode)) {
+        cf.cf_range_max = 1;
+        cf.cf_range_min = 1;
         return &tb_ops_dir;
     }
-    else if (0 == strcmp(type, "file")) {
+    else if (S_ISREG(sb.st_mode)) {
         return &tb_ops_file;
     }
-    else if (0 == strcmp(type, "dev")) {
+    else if (S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)) {
+        cf.tb_rec_sz = DEV_BSIZE;
         return &tb_ops_dev;
     }
 
-    eprint("%s_find(%s): no such type\n", __func__, type);
+    eprint("%s_find(%s): no testbed ops\n", __func__, path);
     exit(EX_USAGE);
     return NULL;
 }

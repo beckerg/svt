@@ -36,7 +36,6 @@ void
 check(void)
 {
     int nduplicates;
-    struct stat sb;
     tb_fd_t *xfd0;
     uint8_t *cnts;
     tb_ops_t *ops;
@@ -49,27 +48,13 @@ check(void)
     cf_load();
     rtck_open();
 
-    rc = stat(cf.tb_path, &sb);
-    if (rc) {
-        eprint("%s: stat(%s): %s\n", __func__, cf.tb_path, strerror(errno));
-        exit(EX_USAGE);
-    }
-
     r = malloc(cf.tb_rec_sz);
     if (!r) {
         eprint("%s: malloc(%ld): out of memory\n", __func__, cf.tb_rec_sz);
         exit(EX_OSERR);
     }
 
-    if (S_ISDIR(sb.st_mode)) {
-        ops = tb_find("dir");
-    }
-    else if (S_ISREG(sb.st_mode)) {
-        ops = tb_find("file");
-    }
-    else {
-        ops = tb_find("dev");
-    }
+    ops = tb_find(cf.tb_path);
 
     xfd0 = ops->tb_open(cf.tb_path, O_RDONLY, 0);
 

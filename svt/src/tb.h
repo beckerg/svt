@@ -29,7 +29,7 @@ typedef struct {
 
 /* Record operations.
  */
-typedef tb_fd_t  *tb_open_t(const char *path, int flags, uint32_t rec_id);
+typedef tb_fd_t *tb_open_t(const char *path, int flags, uint32_t rec_id);
 typedef void    tb_close_t(tb_fd_t *tbfd);
 
 typedef void    tb_init_t(tb_rec_t *rec, uint32_t rec_id);
@@ -49,4 +49,4 @@ typedef struct {
     tb_verify_t    *tb_verify;
 } tb_ops_t;
 
-extern tb_ops_t *tb_find(const char *type);
+extern tb_ops_t *tb_find(const char *path);

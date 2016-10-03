@@ -69,16 +69,7 @@ init(void)
 
     cf.tb_rec_sz = sizeof(*r);
 
-    if (S_ISDIR(sb.st_mode)) {
-        ops = tb_find("dir");
-    }
-    else if (S_ISREG(sb.st_mode)) {
-        ops = tb_find("file");
-    }
-    else {
-        ops = tb_find("dev");
-        cf.tb_rec_sz = DEV_BSIZE;
-    }
+    ops = tb_find(cf.tb_path);
 
     r = malloc(cf.tb_rec_sz);
     if (!r) {

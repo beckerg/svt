@@ -377,7 +377,6 @@ test(void)
     struct timeval tv_tzero, tv_next, tv_now, tv_interval;
     size_t worker_base_sz;
     worker_t *worker_base;
-    struct stat sb;
     tb_ops_t *ops;
     tb_fd_t *xfd0;
     int nworkers;
@@ -402,29 +401,13 @@ test(void)
 
     assert(cf.tb_rec_max > 0);
 
-    rc = stat(cf.tb_path, &sb);
-    if (rc) {
-        eprint("%s: stat(%s): %s\n", __func__, cf.tb_path, strerror(errno));
-        exit(EX_USAGE);
-    }
-
     r = malloc(cf.tb_rec_sz);
     if (!r) {
         eprint("%s: malloc(%ld): out of memory\n", __func__, cf.tb_rec_sz);
         exit(EX_OSERR);
     }
 
-    if (S_ISDIR(sb.st_mode)) {
-        ops = tb_find("dir");
-        cf.cf_range_max = 1;
-        cf.cf_range_min = 1;
-    }
-    else if (S_ISREG(sb.st_mode)) {
-        ops = tb_find("file");
-    }
-    else {
-        ops = tb_find("dev");
-    }
+    ops = tb_find(cf.tb_path);
 
     /* Open the test bed.
      */
