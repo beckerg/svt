@@ -78,13 +78,21 @@ clp_option_t optionv[] = {
       .help = "specify the size of the testbed (in records)",
       .convert = clp_convert_int, .result = &cf.tb_rec_max, },
 
-    { .optopt = 'm',
-      .help = "use mmap",
-      .convert = clp_convert_int, .result = &cf.cf_mmap, },
-
     { .optopt = 'j', .argname = "maxjobs",
       .help = "specify the maximum number of worker processes",
       .convert = clp_convert_int, .result = &cf.cf_jobs_max, },
+
+    { .optopt = 'R', .argname = "rangemax",
+      .help = "specify the maximum number of records to swap",
+      .convert = clp_convert_int, .result = &cf.cf_range_max, },
+
+    { .optopt = 'r', .argname = "rangemin",
+      .help = "specify the minimum number of records to swap",
+      .convert = clp_convert_int, .result = &cf.cf_range_min, },
+
+    { .optopt = 'S', .argname = "swapspct",
+      .help = "specify the percent of swap puts to gets",
+      .convert = clp_convert_int, .result = &cf.cf_swaps_pct, },
 
     { .optopt = 's', .argname = "statsecs",
       .help = "print status every statsecs seconds",

@@ -160,12 +160,38 @@ cf_load(void)
     if (cf.cf_jobs_max < 1) {
         cf.cf_jobs_max = 1;
     }
+    if (cf.cf_swaps_pct < 0) {
+        cf.cf_swaps_pct = 0;
+    } else if (cf.cf_swaps_pct > 100) {
+        cf.cf_swaps_pct = 100;
+    }
+
+    if (cf.cf_range_min > cf.cf_range_max) {
+        cf.cf_range_max = cf.cf_range_min;
+    }
+    if (cf.cf_range_max < cf.cf_range_min) {
+        cf.cf_range_min = cf.cf_range_max;
+    }
+
+    if (cf.cf_range_max < 1) {
+        cf.cf_range_max = 2048;
+    } else if (cf.cf_range_max > 2048) {
+        cf.cf_range_max = 2048;
+    }
+    if (cf.cf_range_min < 1) {
+        cf.cf_range_min = 1;
+    } else if (cf.cf_range_min > 2048) {
+        cf.cf_range_min = 2048;
+    }
 
     fprintf(fp, "tb_rec_max         %u\n", cf.tb_rec_max);
     fprintf(fp, "tb_rec_sz          %u\n", cf.tb_rec_sz);
     fprintf(fp, "cf_runtime_max     %ld\n", cf.cf_runtime_max);
     fprintf(fp, "cf_jobs_max        %u\n", cf.cf_jobs_max);
     fprintf(fp, "cf_status_interval %u\n", cf.cf_status_interval);
+    fprintf(fp, "cf_range_max       %u\n", cf.cf_range_max);
+    fprintf(fp, "cf_range_min       %u\n", cf.cf_range_min);
+    fprintf(fp, "cf_swaps_pct       %u\n", cf.cf_swaps_pct);
 
     assert(cf.tb_rec_max > 0);
     assert(cf.tb_rec_sz > 0);

@@ -79,8 +79,9 @@ typedef struct {
     struct timeval  w_start;
     struct timeval  w_stop;
 
-    worker_stats_t  w_stats;
-    worker_stats_t  w_ostats;
+    worker_stats_t  w_astats;   // Active stats
+    worker_stats_t  w_fstats;   // Frozen/stabilized stats
+    worker_stats_t  w_ostats;   // Old/previous stats
 
     op_t            w_op;       // Current operation
     bool            w_exited;   // 'true' if worker exited
@@ -123,12 +124,17 @@ signal_reliable(int signo, sigfunc_t func)
 }
 
 static void
-test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
+test_worker(tb_ops_t *ops, worker_t *worker)
 {
     worker_stats_t *stats;
     tb_rec_t *r1_base, *r2_base;
     time_t runtime_max;
+    uint range_max;
+    uint range_min;
     int i;
+
+    range_max = cf.cf_range_max;
+    range_min = cf.cf_range_min;
 
     r1_base = malloc(cf.tb_rec_sz * range_max);
     r2_base = malloc(cf.tb_rec_sz * range_max);
@@ -136,7 +142,7 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         abort();
     }
 
-    (void)gettimeofday(&worker->w_start, NULL);
+    gettimeofday(&worker->w_start, NULL);
     worker->w_stop = worker->w_start;
 
     runtime_max = cf.cf_runtime_max;
@@ -151,11 +157,12 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
                worker->w_pid, cf.tb_path);
     }
 
-    stats = &worker->w_stats;
+    stats = &worker->w_astats;
 
     while (1) {
         tb_fd_t *xfd1, *xfd2;
         uint32_t id1, id2;
+        bool update;
         u_int range;
 
         /* Select two non-overlapping ranges within [0, (rec_max - range)].
@@ -163,7 +170,7 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
          * Note: If path is a dir then range_max will always be 1 so that
          * we don't have to manage opening large swaths of files.
          */
-        range = (random() % range_max) + 1;
+        range = (random() % (range_max - range_min + 1)) + range_min;
 
         id1 = random() % (cf.tb_rec_max - range);
 
@@ -195,6 +202,8 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
 
         dprint(3, "swapping %5d  [%7u %7u %7u]\n", worker->w_pid, id1, id2, range);
 
+        update = ((random() % 100) < cf.cf_swaps_pct);
+
         worker->w_op = OP_OPEN;
         xfd1 = ops->tb_open(cf.tb_path, O_RDWR, id1);
         xfd2 = ops->tb_open(cf.tb_path, O_RDWR, id2);
@@ -222,20 +231,24 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
             r1->tr_id = id2 + i;
             r2->tr_id = id1 + i;
 
-            ops->tb_update(r1);
-            ops->tb_update(r2);
+            if (update) {
+                ops->tb_update(r1);
+                ops->tb_update(r2);
 
-            rtck_hash_put(r1->tr_id, r1->tr_hash);
-            rtck_hash_put(r2->tr_id, r2->tr_hash);
+                rtck_hash_put(r1->tr_id, r1->tr_hash);
+                rtck_hash_put(r2->tr_id, r2->tr_hash);
+            }
         }
 
-        worker->w_op = OP_PUT1;
-        ops->tb_put(r1_base, range, xfd2);
+        if (update) {
+            worker->w_op = OP_PUT1;
+            ops->tb_put(r1_base, range, xfd2);
 
-        worker->w_op = OP_PUT2;
-        ops->tb_put(r2_base, range, xfd1);
+            worker->w_op = OP_PUT2;
+            ops->tb_put(r2_base, range, xfd1);
 
-        stats->s_puts += 2;
+            stats->s_puts += 2;
+        }
 
         worker->w_op = OP_CLOSE;
         ops->tb_close(xfd2);
@@ -247,10 +260,10 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
         worker->w_op = OP_WUNLOCK2;
         rtck_wunlock(id1, range);
 
-        stats->s_recs += range;
-        (void)gettimeofday(&worker->w_stop, NULL);
-
         worker->w_op = OP_LOOP;
+
+        stats->s_recs += range * 2;
+        gettimeofday(&worker->w_stop, NULL);
 
         if (runtime_max > 0 || sigint_cnt > 0) {
             if (worker->w_stop.tv_sec >= runtime_max || sigint_cnt > 0) {
@@ -261,7 +274,7 @@ test_worker(tb_ops_t *ops, u_int range_max, worker_t *worker)
 
     worker->w_op = OP_DONE;
 
-    (void)gettimeofday(&worker->w_stop, NULL);
+    gettimeofday(&worker->w_stop, NULL);
 
     free(r1_base);
     free(r2_base);
@@ -275,6 +288,13 @@ test_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start
     struct timeval tv_now, tv_diff;
     ulong msecs;
     int i;
+
+    /* Stabilize the active stats.
+     */
+    for (i = 0; i < cf.cf_jobs_max; ++i) {
+        worker[i].w_fstats.s_gets = worker[i].w_astats.s_gets;
+        worker[i].w_fstats.s_puts = worker[i].w_astats.s_puts;
+    }
 
     if (fheaders) {
         printf("\n%3s %6s %4s %3s %7s %7s %7s %10s %10s %10s %10s\n",
@@ -295,29 +315,29 @@ test_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start
     tot_msecs /= 1000;
 
     for (i = 0; i < cf.cf_jobs_max; ++i, ++worker) {
-        worker_stats_t stats, *ostats;
+        worker_stats_t *stats, *ostats;
         const char *status;
         ulong gets, puts;
         uint code;
 
         /* Sum total ops for all workers.
          */
-        stats = worker->w_stats;
-        tot_gets += stats.s_gets;
-        tot_puts += stats.s_puts;
+        stats = &worker->w_fstats;
+        tot_gets += stats->s_gets;
+        tot_puts += stats->s_puts;
 
         /* Compute interval ops for this worker.
          */
         ostats = &worker->w_ostats;
-        gets = stats.s_gets - ostats->s_gets;
-        puts = stats.s_puts - ostats->s_puts;
+        gets = stats->s_gets - ostats->s_gets;
+        puts = stats->s_puts - ostats->s_puts;
 
         /* Sum interval ops for all workers for this interval.
          */
         itv_gets += gets;
         itv_puts += puts;
 
-        *ostats = stats;
+        *ostats = *stats;
 
         if (verbosity < 1)
             continue;
@@ -341,7 +361,7 @@ test_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start
 
         printf("%3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
                i, worker->w_pid, status, code, op2txt[worker->w_op],
-               gets, puts, stats.s_gets, stats.s_puts, itv_msecs,
+               gets, puts, stats->s_gets, stats->s_puts, itv_msecs,
                worker->w_stop.tv_sec);
     }
 
@@ -354,10 +374,9 @@ test_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start
 void
 test(void)
 {
-    struct timeval tv_tzero, tv_next, tv_now, tv_kbd, tv_interval;
+    struct timeval tv_tzero, tv_next, tv_now, tv_interval;
     size_t worker_base_sz;
     worker_t *worker_base;
-    u_int range_max;
     struct stat sb;
     tb_ops_t *ops;
     tb_fd_t *xfd0;
@@ -395,14 +414,10 @@ test(void)
         exit(EX_OSERR);
     }
 
-    range_max = 2048;
-    if (range_max > cf.tb_rec_max) {
-        range_max = cf.tb_rec_max;
-    }
-
     if (S_ISDIR(sb.st_mode)) {
         ops = tb_find("dir");
-        range_max = 1;
+        cf.cf_range_max = 1;
+        cf.cf_range_min = 1;
     }
     else if (S_ISREG(sb.st_mode)) {
         ops = tb_find("file");
@@ -432,14 +447,13 @@ test(void)
         eprint("%s: sizeof(worker_t) not page aligned: %zu\n", sizeof(*worker_base));
     }
 
+    setpriority(PRIO_PROCESS, 0, -10);
+
     signal_reliable(SIGINT, sigxxx_isr);
     signal_reliable(SIGCHLD, sigxxx_isr);
 
-    setpriority(PRIO_PROCESS, 0, -10);
-
     gettimeofday(&tv_tzero, NULL);
     tv_next = tv_tzero;
-    tv_kbd = tv_tzero;
 
     nworkers = 0;
 
@@ -456,7 +470,7 @@ test(void)
         case 0:
             setpriority(PRIO_PROCESS, 0, -5);
             initstate(getpid(), rng_state, sizeof(rng_state));
-            test_worker(ops, range_max, worker);
+            test_worker(ops, worker);
             _exit(0);
 
         default:
@@ -523,10 +537,10 @@ test(void)
             continue;
         }
 
+        gettimeofday(&tv_now, NULL);
+
         if (timeoutp) {
             struct timeval tv_diff;
-
-            gettimeofday(&tv_now, NULL);
 
             while (timercmp(&tv_next, &tv_now, <)) {
                 timeradd(&tv_next, &tv_interval, &tv_next);
@@ -551,11 +565,10 @@ test(void)
 
                 cc = read(fds[0].fd, buf, sizeof(buf));
                 if (cc > 0) {
-                    test_status(worker_base, &tv_tzero, &tv_kbd);
-                    gettimeofday(&tv_kbd, NULL);
+                    test_status(worker_base, &tv_tzero, &tv_now);
                 }
                 else if (cc == 0) {
-                    kill(getpid(), SIGINT);
+                    kill(0, SIGINT);
                     fds[0].fd = -1;
                 }
                 else {
@@ -566,7 +579,6 @@ test(void)
         }
     }
 
-    gettimeofday(&tv_now, NULL);
     test_status(worker_base, &tv_tzero, &tv_now);
 
     sigprocmask(SIG_SETMASK, &sigmask_orig, NULL);
