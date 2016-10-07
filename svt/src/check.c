@@ -30,23 +30,22 @@
 #include "rtck.h"
 #include "tb.h"
 #include "check.h"
+#include "worker.h"
 #include "main.h"
 
-void
-check(void)
-{
-    int nduplicates;
-    tb_fd_t *xfd0;
-    uint8_t *cnts;
-    tb_ops_t *ops;
-    int nmissing;
-    int ninplace;
-    tb_rec_t *r;
-    int rc;
-    int i;
+typedef struct {
+    uint ninplace;
+    uint cnts[];
+} shared_t;
 
-    cf_load();
-    rtck_open();
+static shared_t *shared;
+
+static void
+check_run(worker_t *worker, tb_ops_t *ops)
+{
+    worker_stats_t *stats;
+    tb_rec_t *r;
+    int i;
 
     r = malloc(cf.tb_rec_sz);
     if (!r) {
@@ -54,68 +53,107 @@ check(void)
         exit(EX_OSERR);
     }
 
-    ops = tb_find(cf.tb_path);
+    stats = &worker->w_astats;
 
-    xfd0 = ops->tb_open(cf.tb_path, O_RDONLY, 0);
-
-    ninplace = 0;
-    nmissing = 0;
-    nduplicates = 0;
-    cnts = calloc(cf.tb_rec_max, sizeof(*cnts));
-
-    dprint(1, "checking test bed integrity %s...\n", cf.tb_path);
-
-    for (i = 0; i < cf.tb_rec_max; ++i) {
+    for (i = worker->w_frec; i < worker->w_lrec; ++i) {
         tb_fd_t *xfd;
 
+        worker->w_op = OP_OPEN;
         xfd = ops->tb_open(cf.tb_path, O_RDONLY, i);
 
+        worker->w_op = OP_GET1;
         ops->tb_get(r, i, 1, xfd);
+        stats->s_gets += 1;
+
+        worker->w_op = OP_VERIFY;
         ops->tb_verify(r);
 
         rtck_hash_verify(r->tr_id, r->tr_hash);
 
-        if (cnts[r->tr_uniqid] < 128) {
-            if (i == r->tr_uniqid) {
-                ++ninplace;
-            }
-            ++cnts[r->tr_uniqid];
+        if (i == r->tr_uniqid) {
+            __sync_fetch_and_add(&shared->ninplace, 1);
         }
+        __sync_fetch_and_add(&shared->cnts[r->tr_uniqid], 1);
 
+        worker->w_op = OP_CLOSE;
         ops->tb_close(xfd);
+
+        worker->w_op = OP_LOOP;
+
+        if (sigint_cnt > 0) {
+            break;
+        }
     }
+
+    free(r);
+}
+
+
+void
+check(void)
+{
+    size_t sharedsz;
+    int nduplicates;
+    uint nmissing;
+    tb_fd_t *xfd0;
+    tb_ops_t *ops;
+    int flags;
+    int rc;
+    int i;
+
+    ops = tb_find(cf.tb_path);
+
+    cf_load();
+    rtck_open();
+
+    xfd0 = ops->tb_open(cf.tb_path, O_RDONLY, 0);
+
+    sharedsz = sizeof(*shared) + sizeof(shared->cnts[0]) * cf.tb_rec_max;
+    flags = MAP_ANON | MAP_SHARED;
+
+    shared = mmap(NULL, sharedsz, PROT_READ | PROT_WRITE, flags, -1, 0);
+    if (shared == MAP_FAILED) {
+        abort();
+    }
+
+    nduplicates = 0;
+    nmissing = 0;
+
+    dprint(1, "checking test bed integrity %s...\n", cf.tb_path);
+
+    worker_run(NULL, NULL, check_run, ops);
 
     dprint(1, "checking uniqueness %s...\n", cf.tb_path);
 
     /* Check that each record appears exactly once.
      */
     for (i = 0; i < cf.tb_rec_max; ++i) {
-        if (cnts[i] != 1) {
-            if (cnts[i] < 1) {
+        if (shared->cnts[i] != 1) {
+            if (shared->cnts[i] < 1) {
                 ++nmissing;
             }
-            else if (cnts[i] > 1) {
+            else if (shared->cnts[i] > 1) {
                 ++nduplicates;
             }
-            dprint(3, "record %d appeared %d times\n", i, cnts[i]);
+            dprint(3, "record %d appeared %u times\n", i, shared->cnts[i]);
         }
     }
 
     dprint(1, "%u of %u records in place (%.2lf %%)\n",
-           ninplace, cf.tb_rec_max, (ninplace * 100.0) / cf.tb_rec_max);
+           shared->ninplace, cf.tb_rec_max, (shared->ninplace * 100.0) / cf.tb_rec_max);
 
     if (nmissing > 0 || nduplicates > 0) {
         if (nmissing > 0) {
-            eprint("%d records missing (data integrity error)\n", nmissing);
+            eprint("%u records missing (data integrity error)\n", nmissing);
         }
         if (nduplicates > 0) {
-            eprint("%d records duplicated (data integrity error)\n", nduplicates);
+            eprint("%u records duplicated (data integrity error)\n", nduplicates);
         }
 
         exit(EX_DATAERR);
     }
 
-    free(cnts);
+    munmap(shared->cnts, sharedsz);
 
     ops->tb_close(xfd0);
 

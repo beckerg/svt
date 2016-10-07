@@ -98,6 +98,8 @@ tb_find(const char *path)
         exit(EX_USAGE);
     }
 
+    cf.tb_rec_sz = sizeof(tb_rec_t);
+
     if (S_ISDIR(sb.st_mode)) {
         cf.cf_range_max = 1;
         cf.cf_range_min = 1;

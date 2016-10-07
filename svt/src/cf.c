@@ -41,6 +41,7 @@ cf_save(void)
     size_t cf_path_sz = 4096;
     struct stat sb;
     char *cf_path;
+    time_t now;
     FILE *fp;
     int rc;
 
@@ -72,11 +73,11 @@ cf_save(void)
 
     dprint(1, "saving configuration in %s\n", cf_path);
 
-    fprintf(fp, "# Generated on ...\n");
-    fprintf(fp, "tb_rec_max %u\n", cf.tb_rec_max);
-    fprintf(fp, "tb_rec_sz  %u\n", cf.tb_rec_sz);
+    now = time(NULL);
+    fprintf(fp, "# Machine generated on %s", ctime(&now));
+    fprintf(fp, "tb_rec_max    %u\n", cf.tb_rec_max);
 
-    (void)fclose(fp);
+    fclose(fp);
 }
 
 
@@ -121,7 +122,7 @@ cf_load(void)
 
     while (fgets(line, sizeof(line), fp)) {
         char *val = line;
-        char *name;
+        char *name, *end;
 
         ++lineno;
 
@@ -139,28 +140,36 @@ cf_load(void)
 
         /* TODO: Deal with strtol() errors...
          */
+        errno = 0;
+        end = NULL;
+
         if (0 == strcmp("tb_rec_max", name)) {
-            cf.tb_rec_max = strtoul(val, NULL, 0);
-        }
-        else if (0 == strcmp("tb_rec_sz", name)) {
-            cf.tb_rec_sz = strtoul(val, NULL, 0);
-        }
-        else if (0 == strcmp("cf_runtime_max", name)) {
-            cf.cf_runtime_max = strtol(val, NULL, 0);
+            cf.tb_rec_max = strtoul(val, &end, 0);
         }
         else {
             eprint("%s: ignoring invalid config variable name [%s] at line %d in %s\n",
                     __func__, name, lineno, cf_path);
         }
+
+        if (errno && end && *end) {
+            eprint("%s: unable to convert %s=%s: %s\n",
+                   __func__, name, val, strerror(errno));
+            abort();
+        }
     }
 
-    if (cf.cf_runtime_max < 0) {
+    if (cf.cf_runtime_max < 1) {
         cf.cf_runtime_max = 0;
+    }
+
+    if (cf.cf_jobs_max > cf.tb_rec_max) {
+        cf.cf_jobs_max = cf.tb_rec_max / 4;
     }
     if (cf.cf_jobs_max < 1) {
         cf.cf_jobs_max = 1;
     }
-    if (cf.cf_swaps_pct < 0) {
+
+    if (cf.cf_swaps_pct < 1) {
         cf.cf_swaps_pct = 0;
     } else if (cf.cf_swaps_pct > 100) {
         cf.cf_swaps_pct = 100;
@@ -183,15 +192,6 @@ cf_load(void)
     } else if (cf.cf_range_min > 2048) {
         cf.cf_range_min = 2048;
     }
-
-    fprintf(fp, "tb_rec_max         %u\n", cf.tb_rec_max);
-    fprintf(fp, "tb_rec_sz          %u\n", cf.tb_rec_sz);
-    fprintf(fp, "cf_runtime_max     %ld\n", cf.cf_runtime_max);
-    fprintf(fp, "cf_jobs_max        %u\n", cf.cf_jobs_max);
-    fprintf(fp, "cf_status_interval %u\n", cf.cf_status_interval);
-    fprintf(fp, "cf_range_max       %u\n", cf.cf_range_max);
-    fprintf(fp, "cf_range_min       %u\n", cf.cf_range_min);
-    fprintf(fp, "cf_swaps_pct       %u\n", cf.cf_swaps_pct);
 
     assert(cf.tb_rec_max > 0);
     assert(cf.tb_rec_sz > 0);

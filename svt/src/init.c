@@ -32,44 +32,16 @@
 #include "tb.h"
 #include "check.h"
 #include "init.h"
+#include "worker.h"
 #include "main.h"
 
-void
-init(void)
+static void
+init_run(worker_t *worker, tb_ops_t *ops)
 {
     int oflags = O_CREAT | O_TRUNC | O_WRONLY;
-    struct stat sb;
-    tb_ops_t *ops;
-    tb_fd_t *xfd0;
+    worker_stats_t *stats;
     tb_rec_t *r;
-    int rc;
     int i;
-
-    rc = stat(cf.tb_path, &sb);
-    if (rc) {
-        if (errno != ENOENT) {
-            eprint("%s: stat(%s): %s\n", __func__, cf.tb_path, strerror(errno));
-            exit(EX_USAGE);
-        }
-
-        dprint(1, "creating test bed directory: %s\n", cf.tb_path);
-
-        rc = mkdir(cf.tb_path, 0755);
-        if (rc) {
-            eprint("%s: mkdir(%s): %s\n", __func__, cf.tb_path, strerror(errno));
-            exit(EX_OSERR);
-        }
-
-        rc = stat(cf.tb_path, &sb);
-        if (rc) {
-            eprint("%s: stat(%s): %s\n", __func__, cf.tb_path, strerror(errno));
-            exit(EX_USAGE);
-        }
-    }
-
-    cf.tb_rec_sz = sizeof(*r);
-
-    ops = tb_find(cf.tb_path);
 
     r = malloc(cf.tb_rec_sz);
     if (!r) {
@@ -77,27 +49,58 @@ init(void)
         exit(EX_OSERR);
     }
 
-    cf_save();
-    rtck_create();
+    stats = &worker->w_astats;
 
-    dprint(1, "initializing %s with %u records...\n",
-           cf.tb_path, cf.tb_rec_max);
-
-    xfd0 = ops->tb_open(cf.tb_path, oflags, 0);
-
-    for (i = 0; i < cf.tb_rec_max; ++i) {
+    for (i = worker->w_frec; i < worker->w_lrec; ++i) {
         rtck_t rtck;
         tb_fd_t *xfd;
 
+        worker->w_op = OP_OPEN;
         xfd = ops->tb_open(cf.tb_path, oflags, i);
 
+        worker->w_op = OP_INIT;
         ops->tb_init(r, i);
-        ops->tb_put(r, 1, xfd);
 
+        worker->w_op = OP_PUT1;
+        ops->tb_put(r, 1, xfd);
+        stats->s_puts += 1;
+
+        worker->w_op = OP_PUT2;
         rtck_hash_put(r->tr_id, r->tr_hash);
 
+        worker->w_op = OP_CLOSE;
         ops->tb_close(xfd);
+
+        worker->w_op = OP_LOOP;
+
+        if (sigint_cnt > 0) {
+            break;
+        }
     }
+
+    free(r);
+}
+
+void
+init(void)
+{
+    tb_ops_t *ops;
+    tb_fd_t *xfd0;
+    int oflags;
+
+    ops = tb_find(cf.tb_path);
+
+    cf_save();
+    cf_load();
+    rtck_create();
+
+    dprint(1, "initializing %s with %u %u-byte records...\n",
+           cf.tb_path, cf.tb_rec_max, cf.tb_rec_sz);
+
+    oflags = O_CREAT | O_TRUNC | O_WRONLY;
+    xfd0 = ops->tb_open(cf.tb_path, oflags, 0);
+
+    worker_run(NULL, NULL, init_run, ops);
 
     ops->tb_close(xfd0);
 
