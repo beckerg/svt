@@ -32,26 +32,28 @@
 #include "tb.h"
 #include "main.h"
 
-static tb_open_t   tb_open_generic;
-static tb_close_t  tb_close_generic;
-static tb_init_t   tb_init_generic;
-static tb_update_t tb_update_generic;
-static tb_verify_t tb_verify_generic;
+#define TB_SUBDIR_MAX   (1024)
 
-static tb_open_t   tb_open_file;
-static tb_close_t  tb_close_file;
-static tb_get_t    tb_get_file;
-static tb_put_t    tb_put_file;
+static tb_open_t        tb_open_generic;
+static tb_close_t       tb_close_generic;
+static tb_init_t        tb_init_generic;
+static tb_update_t      tb_update_generic;
+static tb_verify_t      tb_verify_generic;
 
-static tb_open_t   tb_open_dev;
-static tb_close_t  tb_close_dev;
-static tb_get_t    tb_get_dev;
-static tb_put_t    tb_put_dev;
+static tb_open_t        tb_open_file;
+static tb_close_t       tb_close_file;
+static tb_get_t         tb_get_file;
+static tb_put_t         tb_put_file;
 
-static tb_open_t   tb_open_dir;
-static tb_close_t   tb_close_dir;
-static tb_get_t    tb_get_dir;
-static tb_put_t    tb_put_dir;
+static tb_open_t        tb_open_dev;
+static tb_close_t       tb_close_dev;
+static tb_get_t         tb_get_dev;
+static tb_put_t         tb_put_dev;
+
+static tb_open_t        tb_open_dir;
+static tb_close_t       tb_close_dir;
+static tb_get_t         tb_get_dir;
+static tb_put_t         tb_put_dir;
 
 static tb_ops_t tb_ops_dir = {
     .tb_open = tb_open_dir,
@@ -83,6 +85,9 @@ static tb_ops_t tb_ops_dev = {
     .tb_verify = tb_verify_generic,
 };
 
+static tb_fd_t *xfd_file;
+static tb_fd_t *xfd_dev;
+
 
 tb_ops_t *
 tb_find(const char *path)
@@ -98,23 +103,48 @@ tb_find(const char *path)
         exit(EX_USAGE);
     }
 
-    cf.tb_rec_sz = sizeof(tb_rec_t);
-
     if (S_ISDIR(sb.st_mode)) {
+        char subdir[32];
+        int fd;
+        int i;
+
+        fd = open(path, O_DIRECTORY);
+        if (-1 == fd) {
+            abort();
+        }
+
+        for (i = 0; i < TB_SUBDIR_MAX; ++i) {
+            snprintf(subdir, sizeof(subdir), "%u", i);
+            rc = mkdirat(fd, subdir, 0755);
+            if (rc && errno != EEXIST) {
+                abort();
+            }
+        }
+
+        close(fd);
+
+        cf.tb_rec_sz = sizeof(tb_rec_t);
         cf.cf_range_max = 1;
         cf.cf_range_min = 1;
+
         return &tb_ops_dir;
     }
-    else if (S_ISREG(sb.st_mode)) {
+
+    if (S_ISREG(sb.st_mode)) {
+        cf.tb_rec_sz = sizeof(tb_rec_t);
+
         return &tb_ops_file;
     }
-    else if (S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)) {
+
+    if (S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)) {
         cf.tb_rec_sz = DEV_BSIZE;
+
         return &tb_ops_dev;
     }
 
     eprint("%s_find(%s): no testbed ops\n", __func__, path);
     exit(EX_USAGE);
+
     return NULL;
 }
 
@@ -147,7 +177,7 @@ tb_close_generic(tb_fd_t *xfd)
     assert(xfd);
 
     if (xfd->tf_fd >= 0 && --xfd->tf_opencnt == 0) {
-        (void)close(xfd->tf_fd);
+        close(xfd->tf_fd);
         xfd->tf_fd = -1;
         free(xfd);
     }
@@ -215,32 +245,30 @@ tb_verify_generic(tb_rec_t *r)
 }
 
 
+/* Directory operations...
+ */
 static tb_fd_t *
-tb_open_dir(const char *path_dir, int flags, uint32_t rec_id)
+tb_open_dir(const char *path, int flags, uint32_t rec_id)
 {
-    char path_file[PATH_MAX + 1];
+    char path_file[PATH_MAX];
 
-    snprintf(path_file, sizeof(path_file), "%s/fsx-%d", path_dir, rec_id);
+    snprintf(path_file, sizeof(path_file), "%s/%u/fsx-%u",
+             path, rec_id % TB_SUBDIR_MAX, rec_id);
 
     return tb_open_generic(path_file, flags, rec_id);
 }
 
 
-static char     path_file[PATH_MAX + 1];
-static tb_fd_t *xfd_file = NULL;
-
-/*
+/* File operations...
  */
 static tb_fd_t *
-tb_open_file(const char *path_dir, int flags, uint32_t rec_id)
+tb_open_file(const char *path, int flags, uint32_t rec_id)
 {
-    if (0 == strcmp(path_file, path_dir)) {
-        assert(xfd_file);
+    if (xfd_file) {
         xfd_file->tf_opencnt += 1;
     }
     else {
-        strcpy(path_file, path_dir);
-        xfd_file = tb_open_generic(path_file, flags, rec_id);
+        xfd_file = tb_open_generic(path, flags, rec_id);
     }
 
     return xfd_file;
@@ -251,13 +279,11 @@ static void
 tb_close_file(tb_fd_t *xfd)
 {
     assert(xfd);
+    assert(xfd == xfd_file);
 
     if (xfd->tf_fd >= 0 && --xfd->tf_opencnt == 0) {
-        if (xfd == xfd_file) {
-            path_file[0] = '\000';
-            xfd_file = NULL;
-        }
-        (void)close(xfd->tf_fd);
+        xfd_file = NULL;
+        close(xfd->tf_fd);
         free(xfd);
     }
 }
@@ -312,21 +338,17 @@ tb_put_file(tb_rec_t *r, int n, tb_fd_t *xfd)
     return 0;
 }
 
-static char     path_dev[PATH_MAX + 1];
-static tb_fd_t *xfd_dev = NULL;
 
-/*
+/* blk/chr device operations...
  */
 static tb_fd_t *
-tb_open_dev(const char *path_dir, int flags, uint32_t rec_id)
+tb_open_dev(const char *path, int flags, uint32_t rec_id)
 {
-    if (0 == strcmp(path_dev, path_dir)) {
-        assert(xfd_dev);
+    if (xfd_dev) {
         xfd_dev->tf_opencnt += 1;
     }
     else {
-        strcpy(path_file, path_dir);
-        xfd_dev = tb_open_generic(path_file, flags, rec_id);
+        xfd_dev = tb_open_generic(path, flags, rec_id);
     }
 
     return xfd_dev;
@@ -337,13 +359,11 @@ static void
 tb_close_dev(tb_fd_t *xfd)
 {
     assert(xfd);
+    assert(xfd == xfd_dev);
 
     if (xfd->tf_fd >= 0 && --xfd->tf_opencnt == 0) {
-        if (xfd == xfd_dev) {
-            path_dev[0] = '\000';
-            xfd_dev = NULL;
-        }
-        (void)close(xfd->tf_fd);
+        xfd_dev = NULL;
+        close(xfd->tf_fd);
         free(xfd);
     }
 }
