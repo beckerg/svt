@@ -48,11 +48,27 @@ char *cf_dir;
 FILE *dprint_stream;
 FILE *eprint_stream;
 
+uint rangev[2];
+
+clp_cvtparms_t rangev_parms = {
+    .max = sizeof(rangev) / sizeof(rangev[0]),
+    .min = 1,
+    .delim = ",-:",
+};
+
+static void
+rangev_after(struct clp_option_s *option)
+{
+    uint *resultv = option->cvtdst;
+
+    cf.cf_range_min = resultv[0];
+    cf.cf_range_max = resultv[1];
+}
 
 clp_posparam_t posparamv[] = {
     { .name = "testbed",
       .help = "path to the testbed",
-      .convert = clp_convert_string, .result = &cf.tb_path, },
+      .convert = clp_convert_string, .cvtdst = &cf.tb_path, },
 
     CLP_PARAM_END
 };
@@ -62,45 +78,42 @@ clp_option_t optionv[] = {
     CLP_OPTION_VERSION(version),
     CLP_OPTION_HELP,
 
-    { .optopt = 'C', .argname = "cfdir",
+    { .optopt = 'C', .argname = "cfdir", .longopt = "conf",
       .help = "specify the config file directory",
-      .convert = clp_convert_string, .result = &cf_dir, },
+      .convert = clp_convert_string, .cvtdst = &cf_dir, },
 
-    { .optopt = 'c',
+    { .optopt = 'c', .longopt = "check",
       .help = "check the testbed for errors",
-      .convert = clp_convert_bool, .result = &fcheck, },
+      .convert = clp_convert_bool, .cvtdst = &fcheck, },
 
-    { .optopt = 'H',
+    { .optopt = 'H', .longopt = "no-headers",
       .help = "suppress headers",
-      .convert = clp_convert_bool, .result = &fheaders, },
+      .convert = clp_convert_bool, .cvtdst = &fheaders, },
 
-    { .optopt = 'i', .argname = "maxrecs",
+    { .optopt = 'i', .argname = "maxrecs", .longopt = "init",
       .help = "specify the size of the testbed (in records)",
-      .convert = clp_convert_int, .result = &cf.tb_rec_max, },
+      .convert = clp_convert_int, .cvtdst = &cf.tb_rec_max, },
 
-    { .optopt = 'j', .argname = "maxjobs",
+    { .optopt = 'j', .argname = "maxjobs", .longopt = "jobs",
       .help = "specify the maximum number of worker processes",
-      .convert = clp_convert_int, .result = &cf.cf_jobs_max, },
+      .convert = clp_convert_int, .cvtdst = &cf.cf_jobs_max, },
 
-    { .optopt = 'R', .argname = "rangemax",
-      .help = "specify the maximum number of records to swap",
-      .convert = clp_convert_int, .result = &cf.cf_range_max, },
+    { .optopt = 'r', .argname = "range", .longopt = "range",
+      .help = "specify the min[,max] number of records per swap",
+      .convert = clp_convert_int, .cvtdst = rangev,
+      .cvtparms = &rangev_parms, .after = rangev_after },
 
-    { .optopt = 'r', .argname = "rangemin",
-      .help = "specify the minimum number of records to swap",
-      .convert = clp_convert_int, .result = &cf.cf_range_min, },
-
-    { .optopt = 'S', .argname = "swapspct",
+    { .optopt = 'S', .argname = "swpct", .longopt = "swpct",
       .help = "specify the percent of swap puts to gets",
-      .convert = clp_convert_int, .result = &cf.cf_swaps_pct, },
+      .convert = clp_convert_int, .cvtdst = &cf.cf_swaps_pct, },
 
-    { .optopt = 's', .argname = "statsecs",
+    { .optopt = 's', .argname = "statsecs", .longopt = "stats",
       .help = "print status every statsecs seconds",
-      .convert = clp_convert_int, .result = &cf.cf_status_interval, },
+      .convert = clp_convert_int, .cvtdst = &cf.cf_status_interval, },
 
-    { .optopt = 't', .argname = "maxsecs",
-      .help = "run in test mode for maxsecs seconds",
-      .convert = clp_convert_int, .result = &cf.cf_runtime_max, },
+    { .optopt = 't', .argname = "testsecs", .longopt = "test",
+      .help = "run in test mode for testsecs seconds",
+      .convert = clp_convert_int, .cvtdst = &cf.cf_runtime_max, },
 
     CLP_OPTION_END
 };
@@ -110,7 +123,7 @@ given(int c)
 {
     clp_option_t *opt = clp_option_find(optionv, c);
 
-    return (opt && opt->given);
+    return (opt && opt->given > 0);
 }
 
 int
@@ -141,7 +154,7 @@ main(int argc, char **argv)
         return 0;
 
     if (!(given('c') || given('i') || given('t'))) {
-        eprint("one of -c, -i, or -t must be given, use `-h' for help\n");
+        eprint("one of -c, -i, or -t must be given, use -h for help\n");
         exit(EX_USAGE);
     }
 
@@ -149,16 +162,16 @@ main(int argc, char **argv)
     argv += optind;
 
     if (argc < 1) {
-        eprint("insufficient arguments for mandatory parameters, use `-h' for help\n");
+        eprint("insufficient arguments for mandatory parameters, use -h for help\n");
         exit(EX_USAGE);
     } else if (argc > 1) {
-        eprint("extraneous arguments detected, use `-h' for help\n");
+        eprint("extraneous arguments detected, use -h for help\n");
         exit(EX_USAGE);
     }
 
 #if !HAVE_MMAP
     if (given('m')) {
-        eprint("mmap not available on this platform, use `-h' for help\n");
+        eprint("mmap not available on this platform, use -h for help\n");
         exit(EX_USAGE);
     }
 #endif
