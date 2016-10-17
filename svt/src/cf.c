@@ -193,6 +193,16 @@ cf_load(void)
         cf.cf_range_min = 2048;
     }
 
+    dprint(2, "cf_dir:          %s\n", cf.cf_dir);
+    dprint(2, "tb_path:         %s\n", cf.tb_path);
+    dprint(2, "tb_rec_max:      %u\n", cf.tb_rec_max);
+    dprint(2, "tb_rec_sz:       %zu\n", cf.tb_rec_sz);
+    dprint(2, "cf_jobs_max:     %u\n", cf.cf_jobs_max);
+    dprint(2, "cf_range_min:    %u\n", cf.cf_range_min);
+    dprint(2, "cf_range_max:    %u\n", cf.cf_range_max);
+    dprint(2, "cf_runtime_max:  %d\n", cf.cf_runtime_max);
+    dprint(2, "cf_swaps_pct:    %d\n", cf.cf_swaps_pct);
+
     assert(cf.tb_rec_max > 0);
     assert(cf.tb_rec_sz > 0);
 

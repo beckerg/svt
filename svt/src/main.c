@@ -48,18 +48,12 @@ char *cf_dir;
 FILE *dprint_stream;
 FILE *eprint_stream;
 
-uint rangev[2];
-
-clp_cvtparms_t rangev_parms = {
-    .max = sizeof(rangev) / sizeof(rangev[0]),
-    .min = 1,
-    .delim = ",-:",
-};
+CLP_VECTOR(rangev, u_int, 2, ",-:");
 
 static void
 rangev_after(struct clp_option_s *option)
 {
-    uint *resultv = option->cvtdst;
+    u_int *resultv = option->cvtdst;
 
     cf.cf_range_min = resultv[0];
     cf.cf_range_max = resultv[1];
@@ -68,7 +62,7 @@ rangev_after(struct clp_option_s *option)
 clp_posparam_t posparamv[] = {
     { .name = "testbed",
       .help = "path to the testbed",
-      .convert = clp_convert_string, .cvtdst = &cf.tb_path, },
+      .convert = clp_cvt_string, .cvtdst = &cf.tb_path, },
 
     CLP_PARAM_END
 };
@@ -80,40 +74,40 @@ clp_option_t optionv[] = {
 
     { .optopt = 'C', .argname = "cfdir", .longopt = "conf",
       .help = "specify the config file directory",
-      .convert = clp_convert_string, .cvtdst = &cf_dir, },
+      .convert = clp_cvt_string, .cvtdst = &cf_dir, },
 
     { .optopt = 'c', .longopt = "check",
       .help = "check the testbed for errors",
-      .convert = clp_convert_bool, .cvtdst = &fcheck, },
+      .convert = clp_cvt_bool, .cvtdst = &fcheck, },
 
     { .optopt = 'H', .longopt = "no-headers",
       .help = "suppress headers",
-      .convert = clp_convert_bool, .cvtdst = &fheaders, },
+      .convert = clp_cvt_bool, .cvtdst = &fheaders, },
 
     { .optopt = 'i', .argname = "maxrecs", .longopt = "init",
       .help = "specify the size of the testbed (in records)",
-      .convert = clp_convert_int, .cvtdst = &cf.tb_rec_max, },
+      .convert = clp_cvt_int, .cvtdst = &cf.tb_rec_max, },
 
     { .optopt = 'j', .argname = "maxjobs", .longopt = "jobs",
       .help = "specify the maximum number of worker processes",
-      .convert = clp_convert_int, .cvtdst = &cf.cf_jobs_max, },
+      .convert = clp_cvt_int, .cvtdst = &cf.cf_jobs_max, },
 
     { .optopt = 'r', .argname = "range", .longopt = "range",
       .help = "specify the min[,max] number of records per swap",
-      .convert = clp_convert_int, .cvtdst = rangev,
-      .cvtparms = &rangev_parms, .after = rangev_after },
+      .convert = clp_cvt_int, .cvtdst = rangev.data,
+      .cvtparms = &rangev, .after = rangev_after },
 
     { .optopt = 'S', .argname = "swpct", .longopt = "swpct",
       .help = "specify the percent of swap puts to gets",
-      .convert = clp_convert_int, .cvtdst = &cf.cf_swaps_pct, },
+      .convert = clp_cvt_int, .cvtdst = &cf.cf_swaps_pct, },
 
     { .optopt = 's', .argname = "statsecs", .longopt = "stats",
       .help = "print status every statsecs seconds",
-      .convert = clp_convert_int, .cvtdst = &cf.cf_status_interval, },
+      .convert = clp_cvt_int, .cvtdst = &cf.cf_status_interval, },
 
     { .optopt = 't', .argname = "testsecs", .longopt = "test",
       .help = "run in test mode for testsecs seconds",
-      .convert = clp_convert_int, .cvtdst = &cf.cf_runtime_max, },
+      .convert = clp_cvt_int, .cvtdst = &cf.cf_runtime_max, },
 
     CLP_OPTION_END
 };
