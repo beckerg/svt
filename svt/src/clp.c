@@ -941,7 +941,10 @@ clp_parsev_impl(clp_t *clp, int argc, char **argv, int *optindp)
     /* Reset getopt_long().
      * TODO: Create getopt_long_r() for MT goodness.
      */
+#ifdef __freebsd__
     optreset = 1;
+#endif
+
     optind = 1;
 
     while (1) {

@@ -27,6 +27,10 @@
 #ifndef SYSTEM_H
 #define SYSTEM_H
 
+#ifdef __linux__
+#define _GNU_SOURCE
+#endif
+
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif

@@ -201,10 +201,10 @@ worker_run(worker_init_t *init, worker_fini_t *fini, worker_run_t *run, tb_ops_t
         exit(EX_OSERR);
     }
 
-    if ((uintptr_t)worker_base & (PAGE_SIZE - 1)) {
+    if ((uintptr_t)worker_base & (getpagesize() - 1)) {
         eprint("%s: mmap returned non-page aligned address: %p\n", worker_base);
     }
-    if (sizeof(*worker_base) & (PAGE_SIZE - 1)) {
+    if (sizeof(*worker_base) & (getpagesize() - 1)) {
         eprint("%s: sizeof(worker_t) not page aligned: %zu\n", sizeof(*worker_base));
     }
 

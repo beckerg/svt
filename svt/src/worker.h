@@ -37,7 +37,7 @@ typedef struct {
 /* Worker state
  */
 typedef struct {
-    __attribute__((__aligned__(PAGE_SIZE)))
+    __attribute__((__aligned__(4096)))
     uint            w_id;
     pid_t           w_pid;
     struct timeval  w_start;
