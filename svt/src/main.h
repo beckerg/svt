@@ -23,7 +23,8 @@
 extern char *progname;      // The programe name (i.e., the basename of argv[0])
 extern int verbosity;       // The number of times -v appeared on the command line
 
-extern bool fheaders;
+extern bool headers;
+extern bool verify;
 
 /* By default dprint() and eprint() print to stderr.  You can change that
  * behavior by simply setting these variables to a different stream.

@@ -91,7 +91,7 @@ worker_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_sta
         worker[i].w_fstats.s_puts = worker[i].w_astats.s_puts;
     }
 
-    if (fheaders) {
+    if (headers) {
         printf("\n%3s %6s %4s %3s %7s %7s %7s %10s %10s %10s %10s\n",
                "ID", "PID", "S", "C", "OP",
                "iGETS", "iPUTS", "tGETS", "tPUTS", "MSECS", "EPOCH");

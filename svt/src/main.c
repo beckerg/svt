@@ -41,8 +41,9 @@ static char version[] = SVT_VERSION;
 char *progname;
 int verbosity;
 
-bool fheaders = true;
+bool headers = true;
 bool fcheck = false;
+bool verify = true;
 char *cf_dir;
 
 FILE *dprint_stream;
@@ -81,8 +82,8 @@ clp_option_t optionv[] = {
       .convert = clp_cvt_bool, .cvtdst = &fcheck, },
 
     { .optopt = 'H', .longopt = "no-headers",
-      .help = "suppress headers",
-      .convert = clp_cvt_bool, .cvtdst = &fheaders, },
+      .help = "suppress column headers",
+      .convert = clp_cvt_bool, .cvtdst = &headers, },
 
     { .optopt = 'i', .argname = "maxrecs", .longopt = "init",
       .help = "specify the size of the testbed (in records)",
@@ -91,6 +92,10 @@ clp_option_t optionv[] = {
     { .optopt = 'j', .argname = "maxjobs", .longopt = "jobs",
       .help = "specify the maximum number of worker processes",
       .convert = clp_cvt_int, .cvtdst = &cf.cf_jobs_max, },
+
+    { .optopt = 'R', .longopt = "verify",
+      .help = "disable read verification",
+      .convert = clp_cvt_bool, .cvtdst = &verify, },
 
     { .optopt = 'r', .argname = "range", .longopt = "range",
       .help = "specify the min[,max] number of records per swap",

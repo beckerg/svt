@@ -185,8 +185,10 @@ test_run(worker_t *worker, tb_ops_t *ops)
             tb_rec_t *r1 = (tb_rec_t *)((char *)r1_base + (i * cf.tb_rec_sz));
             tb_rec_t *r2 = (tb_rec_t *)((char *)r2_base + (i * cf.tb_rec_sz));
 
-            ops->tb_verify(r1);
-            ops->tb_verify(r2);
+            if (verify) {
+                ops->tb_verify(r1);
+                ops->tb_verify(r2);
+            }
 
             rtck_hash_verify(r1->tr_id, r1->tr_hash);
             rtck_hash_verify(r2->tr_id, r2->tr_hash);
