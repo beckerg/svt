@@ -148,7 +148,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
             id2 = tmp;
         }
 
-        while (1) {
+        while (cf.cf_swaps_pct > 0) {
             worker->w_op = OP_WLOCK1;
             if (0 == rtck_wlock(id1, range)) {
                 worker->w_op = OP_WLOCK2;
