@@ -35,22 +35,71 @@
 
 typedef void (*sigfunc_t)(int);
 
+static inline uint64_t
+rotl(const uint64_t x, int k)
+{
+    return (x << k) | (x >> (64 - k));
+}
+
+static void
+xoroshiro128plus_init(uint64_t *s, uint64_t seed)
+{
+    uint64_t z;
+
+    z = (seed += UINT64_C(0x9E3779B97F4A7C15));
+    z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+    z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+    s[0] = z ^ (z >> 31);
+
+    z = (seed += UINT64_C(0x9E3779B97F4A7C15));
+    z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+    z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+    s[1] = z ^ (z >> 31);
+}
+
+static uint64_t
+xoroshiro128plus(uint64_t *s)
+{
+    const uint64_t s0 = s[0];
+    uint64_t s1 = s[1];
+    const uint64_t result = s0 + s1;
+
+    s1 ^= s0;
+    s[0] = rotl(s0, 55) ^ s1 ^ (s1 << 14);
+    s[1] = rotl(s1, 36);
+
+    return result;
+}
+
 static void
 test_run(worker_t *worker, tb_ops_t *ops)
 {
     worker_stats_t *stats;
     tb_rec_t *r1_base, *r2_base;
     time_t runtime_max;
+    uint64_t xstate[2];
+    size_t alignment;
     uint range_max;
     uint range_min;
+    int rc;
     int i;
 
     range_max = cf.cf_range_max;
     range_min = cf.cf_range_min;
 
-    r1_base = malloc(cf.tb_rec_sz * range_max);
-    r2_base = malloc(cf.tb_rec_sz * range_max);
-    if (!r1_base || !r2_base) {
+    alignment = 32 * 1024;
+
+    rc = posix_memalign((void **)&r1_base, alignment, cf.tb_rec_sz * range_max);
+    if (rc) {
+        eprint("unable to get %zu-bytes of %zu-byte aligned memory\n",
+               cf.tb_rec_sz * range_max, alignment);
+        abort();
+    }
+
+    rc = posix_memalign((void **)&r2_base, alignment, cf.tb_rec_sz * range_max);
+    if (rc) {
+        eprint("unable to get %zu-bytes of %zu-byte aligned memory\n",
+               cf.tb_rec_sz * range_max, alignment);
         abort();
     }
 
@@ -71,6 +120,8 @@ test_run(worker_t *worker, tb_ops_t *ops)
 
     stats = &worker->w_astats;
 
+    xoroshiro128plus_init(xstate, random());
+
     while (1) {
         tb_fd_t *xfd1, *xfd2;
         uint32_t id1, id2;
@@ -82,12 +133,12 @@ test_run(worker_t *worker, tb_ops_t *ops)
          * Note: If path is a dir then range_max will always be 1 so that
          * we don't have to manage opening large swaths of files.
          */
-        range = (random() % (range_max - range_min + 1)) + range_min;
+        range = (xoroshiro128plus(xstate) % (range_max - range_min + 1)) + range_min;
 
-        id1 = random() % (cf.tb_rec_max - range);
+        id1 = xoroshiro128plus(xstate) % (cf.tb_rec_max - range);
 
         do {
-            id2 = random() % (cf.tb_rec_max - range);
+            id2 = xoroshiro128plus(xstate) % (cf.tb_rec_max - range);
         } while (!(id2 > id1 + range || id1 > id2 + range));
 
         if (id1 > id2) {
@@ -114,7 +165,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
 
         dprint(3, "swapping %5d  [%7u %7u %7u]\n", worker->w_pid, id1, id2, range);
 
-        update = ((random() % 100) < cf.cf_swaps_pct);
+        update = ((xoroshiro128plus(xstate) % 100) < cf.cf_swaps_pct);
 
         worker->w_op = OP_OPEN;
         xfd1 = ops->tb_open(cf.tb_path, O_RDWR, id1);
