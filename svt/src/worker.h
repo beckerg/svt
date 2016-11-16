@@ -66,6 +66,6 @@ extern volatile sig_atomic_t sigchld_cnt;
 extern const char *op2txt[];
 
 void
-worker_run(worker_init_t *, worker_fini_t *, worker_run_t *, tb_ops_t *);
+worker_run(const char *mode, worker_init_t *, worker_fini_t *, worker_run_t *, tb_ops_t *);
 
 #endif /* SVT_WORKER_H */

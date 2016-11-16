@@ -93,8 +93,8 @@ clp_option_t optionv[] = {
       .help = "specify the maximum number of worker processes",
       .convert = clp_cvt_int, .cvtdst = &cf.cf_jobs_max, },
 
-    { .optopt = 'R', .longopt = "verify",
-      .help = "disable read verification",
+    { .optopt = 'R', .longopt = "no-verify",
+      .help = "disable read verification in test mode",
       .convert = clp_cvt_bool, .cvtdst = &verify, },
 
     { .optopt = 'r', .argname = "range", .longopt = "range",
@@ -112,7 +112,7 @@ clp_option_t optionv[] = {
 
     { .optopt = 't', .argname = "testsecs", .longopt = "test",
       .help = "run in test mode for testsecs seconds",
-      .convert = clp_cvt_int, .cvtdst = &cf.cf_runtime_max, },
+      .convert = clp_cvt_time_t, .cvtdst = &cf.cf_runtime_max, },
 
     CLP_OPTION_END
 };

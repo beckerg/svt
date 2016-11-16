@@ -100,7 +100,7 @@ init(void)
     oflags = O_CREAT | O_TRUNC | O_WRONLY;
     xfd0 = ops->tb_open(cf.tb_path, oflags, 0);
 
-    worker_run(NULL, NULL, init_run, ops);
+    worker_run(__func__, NULL, NULL, init_run, ops);
 
     ops->tb_close(xfd0);
 

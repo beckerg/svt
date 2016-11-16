@@ -76,12 +76,13 @@ signal_reliable(int signo, sigfunc_t func)
 }
 
 static void
-worker_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start)
+worker_status(const char *mode, worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_start)
 {
     ulong tot_gets, tot_puts, tot_msecs;
     ulong itv_gets, itv_puts, itv_msecs;
     struct timeval tv_now, tv_diff;
     ulong msecs;
+    bool once;
     int i;
 
     /* Stabilize the active stats.
@@ -91,9 +92,14 @@ worker_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_sta
         worker[i].w_fstats.s_puts = worker[i].w_astats.s_puts;
     }
 
-    if (headers) {
-        printf("\n%3s %6s %4s %3s %7s %7s %7s %10s %10s %10s %10s\n",
-               "ID", "PID", "S", "C", "OP",
+    once = (verbosity > 0);
+    if (!once && headers && tv_tzero && tv_start) {
+        once = ((tv_start->tv_sec - tv_tzero->tv_sec) % 23) == 0;
+    }
+
+    if (once) {
+        printf("\n%-5s %3s %6s %4s %3s %7s %7s %7s %10s %10s %10s %10s\n",
+               "MODE", "TID", "PID", "S", "C", "OP",
                "iGETS", "iPUTS", "tGETS", "tPUTS", "MSECS", "EPOCH");
     }
 
@@ -154,20 +160,20 @@ worker_status(worker_t *worker, struct timeval *tv_tzero, struct timeval *tv_sta
             }
         }
 
-        printf("%3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
-               i, worker->w_pid, status, code, op2txt[worker->w_op],
+        printf("%-5s %3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
+               mode, i, worker->w_pid, status, code, op2txt[worker->w_op],
                gets, puts, stats->s_gets, stats->s_puts, itv_msecs,
                worker->w_stop.tv_sec);
     }
 
-    printf("%3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
-           "-", getpid(), "-", 0, "total",
+    printf("%-5s %3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
+           mode, "all", getpid(), "-", 0, "total",
            itv_gets, itv_puts, tot_gets, tot_puts, tot_msecs,
            tv_now.tv_sec);
 }
 
 void
-worker_run(worker_init_t *init, worker_fini_t *fini, worker_run_t *run, tb_ops_t *ops)
+worker_run(const char *mode, worker_init_t *init, worker_fini_t *fini, worker_run_t *run, tb_ops_t *ops)
 {
     struct timeval tv_tzero, tv_next, tv_now, tv_interval;
     size_t worker_base_sz;
@@ -343,7 +349,7 @@ worker_run(worker_init_t *init, worker_fini_t *fini, worker_run_t *run, tb_ops_t
         nfds = ppoll(fds, 1, timeoutp, &sigmask_orig);
 
         if (nfds == 0) {
-            worker_status(worker_base, &tv_tzero, &tv_now);
+            worker_status(mode, worker_base, &tv_tzero, &tv_now);
         }
         else if (nfds > 0) {
             if (fds[0].revents & POLLIN) {
@@ -352,7 +358,7 @@ worker_run(worker_init_t *init, worker_fini_t *fini, worker_run_t *run, tb_ops_t
 
                 cc = read(fds[0].fd, buf, sizeof(buf));
                 if (cc > 0) {
-                    worker_status(worker_base, &tv_tzero, &tv_now);
+                    worker_status(mode, worker_base, &tv_tzero, &tv_now);
                 }
                 else if (cc == 0) {
                     kill(0, SIGINT);
@@ -366,7 +372,7 @@ worker_run(worker_init_t *init, worker_fini_t *fini, worker_run_t *run, tb_ops_t
         }
     }
 
-    worker_status(worker_base, &tv_tzero, &tv_now);
+    worker_status(mode, worker_base, &tv_tzero, &tv_now);
 
     sigprocmask(SIG_SETMASK, &sigmask_orig, NULL);
 

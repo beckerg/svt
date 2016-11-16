@@ -121,7 +121,7 @@ check(void)
 
     dprint(1, "checking test bed integrity %s...\n", cf.tb_path);
 
-    worker_run(NULL, NULL, check_run, ops);
+    worker_run(__func__, NULL, NULL, check_run, ops);
 
     dprint(1, "checking uniqueness %s...\n", cf.tb_path);
 

@@ -258,7 +258,7 @@ test(void)
 
     xfd0 = ops->tb_open(cf.tb_path, O_RDWR | O_DIRECT, 0);
 
-    worker_run(NULL, NULL, test_run, ops);
+    worker_run(__func__, NULL, NULL, test_run, ops);
 
     ops->tb_close(xfd0);
     rtck_close();
