@@ -128,7 +128,7 @@ given(int c)
 int
 main(int argc, char **argv)
 {
-    char errbuf[CLP_ERRBUFSZ];
+    char errbuf[128];
     char state[256];
     int optind;
     int i, c;
@@ -143,7 +143,7 @@ main(int argc, char **argv)
 
     (void)initstate(time(NULL), state, sizeof(state));
 
-    rc = clp_parsev(argc, argv, optionv, posparamv, errbuf, &optind);
+    rc = clp_parsev(argc, argv, optionv, posparamv, errbuf, sizeof(errbuf), &optind);
     if (rc) {
         fprintf(stderr, "%s: %s\n", progname, errbuf);
         exit(rc);
@@ -159,14 +159,6 @@ main(int argc, char **argv)
 
     argc -= optind;
     argv += optind;
-
-    if (argc < 1) {
-        eprint("insufficient arguments for mandatory parameters, use -h for help\n");
-        exit(EX_USAGE);
-    } else if (argc > 1) {
-        eprint("extraneous arguments detected, use -h for help\n");
-        exit(EX_USAGE);
-    }
 
 #if !HAVE_MMAP
     if (given('m')) {
