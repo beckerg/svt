@@ -283,7 +283,7 @@ worker_run(const char *mode, worker_init_t *init, worker_fini_t *fini, worker_ru
     tv_interval.tv_usec = 0;
     timeoutp = (cf.cf_status_interval > 0) ? &ts_interval : NULL;
 
-    fds[0].fd = STDIN_FILENO;
+    fds[0].fd = isatty(0) ? 0 : -1;
     fds[0].events = POLLIN;
 
     while (nworkers > 0) {
