@@ -94,6 +94,7 @@ rtck_create(void)
 void
 rtck_open(void)
 {
+    char errbuf[64];
     struct stat sb;
     int rc;
 
@@ -105,13 +106,15 @@ rtck_open(void)
 
     rtck_fd = open(rtck_path, O_RDWR);
     if (-1 == rtck_fd) {
-        eprint("%s: open(%s): %s\n", __func__, rtck_path, strerror(errno));
+        eprint("%s: open(%s): %s\n",
+               __func__, rtck_path, strerror_r(errno, errbuf, sizeof(errbuf)));
         exit(EX_OSERR);
     }
 
     rc = fstat(rtck_fd, &sb);
     if (rc) {
-        eprint("%s: fstat(%s): %s\n", __func__, rtck_path, strerror(errno));
+        eprint("%s: fstat(%s): %s\n",
+               __func__, rtck_path, strerror_r(errno, errbuf, sizeof(errbuf)));
         exit(EX_OSERR);
     }
 
@@ -127,7 +130,8 @@ rtck_open(void)
                      PROT_READ | PROT_WRITE, MAP_SHARED, rtck_fd, 0);
 
     if (rtck_base == MAP_FAILED) {
-        eprint("%s: mmap(%s): %s\n", __func__, rtck_path, strerror(errno));
+        eprint("%s: mmap(%s): %s\n",
+               __func__, rtck_path, strerror_r(errno, errbuf, sizeof(errbuf)));
         exit(EX_OSERR);
     }
 }
@@ -152,12 +156,11 @@ rtck_hash_get(uint32_t rec_id, uint64_t *hash)
 
     r = rtck_base + rec_id;
 
-    hash[0] = r->rtck_hash[0];
-    hash[1] = r->rtck_hash[1];
+    hash[0] = r->rtck_hash;
 }
 
 void
-rtck_hash_put(uint32_t rec_id, const uint64_t *hash)
+rtck_hash_set(uint32_t rec_id, const uint64_t *hash)
 {
     rtck_t *r;
 
@@ -166,8 +169,7 @@ rtck_hash_put(uint32_t rec_id, const uint64_t *hash)
 
     r = rtck_base + rec_id;
 
-    r->rtck_hash[0] = hash[0];
-    r->rtck_hash[1] = hash[1];
+    r->rtck_hash = hash[0];
 }
 
 void
@@ -180,8 +182,7 @@ rtck_hash_verify(uint32_t rec_id, const uint64_t *hash)
 
     r = rtck_base + rec_id;
 
-    assert(r->rtck_hash[0] == hash[0]);
-    assert(r->rtck_hash[1] == hash[1]);
+    assert(r->rtck_hash == hash[0]);
 }
 
 void
@@ -198,7 +199,7 @@ rtck_val_get(uint32_t rec_id, uint64_t *val)
 }
 
 void
-rtck_val_put(uint32_t rec_id, uint64_t val)
+rtck_val_set(uint32_t rec_id, uint64_t val)
 {
     rtck_t *r;
 
@@ -217,6 +218,7 @@ int
 rtck_wlock(uint32_t rec_id, int range)
 {
     struct flock lk;
+    char errbuf[64];
     int rc;
 
   retry:
@@ -232,7 +234,8 @@ rtck_wlock(uint32_t rec_id, int range)
             return errno;
         }
 
-        eprint("%s: fcntl(%d, F_SETLK): %s\n", __func__, rtck_fd, strerror(errno));
+        eprint("%s: fcntl(%d, F_SETLK): %s\n",
+               __func__, rtck_fd, strerror_r(errno, errbuf, sizeof(errbuf)));
 
         if (errno == EINTR) {
             goto retry;
@@ -250,6 +253,7 @@ int
 rtck_wunlock(uint32_t rec_id, int range)
 {
     struct flock lk;
+    char errbuf[64];
     int rc;
 
   retry:
@@ -261,7 +265,8 @@ rtck_wunlock(uint32_t rec_id, int range)
 
     rc = fcntl(rtck_fd, F_SETLK, &lk);
     if (rc) {
-        eprint("%s: fcntl(%d, F_SETLK): %s\n", __func__, rtck_fd, strerror(errno));
+        eprint("%s: fcntl(%d, F_SETLK): %s\n",
+               __func__, rtck_fd, strerror_r(errno, errbuf, sizeof(errbuf)));
 
         if (errno == EINTR) {
             goto retry;

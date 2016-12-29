@@ -128,11 +128,13 @@ test_run(worker_t *worker, tb_ops_t *ops)
         bool update;
         u_int range;
 
-        /* Select two non-overlapping ranges within [0, (rec_max - range)].
+        /* Select two non-overlapping ranges within [0, (rec_max - range)]
+         * of the test bed.
          *
          * Note: If path is a dir then range_max will always be 1 so that
          * we don't have to manage opening large swaths of files.
          */
+      again:
         range = (xoroshiro128plus(xstate) % (range_max - range_min + 1)) + range_min;
 
         id1 = xoroshiro128plus(xstate) % (cf.tb_rec_max - range);
@@ -148,6 +150,9 @@ test_run(worker_t *worker, tb_ops_t *ops)
             id2 = tmp;
         }
 
+        /* Try to get an exclusive lock over each range.  No locking
+         * is required if we're not swapping.
+         */
         while (cf.cf_swaps_pct > 0) {
             worker->w_op = OP_WLOCK1;
             if (0 == rtck_wlock(id1, range)) {
@@ -161,6 +166,8 @@ test_run(worker_t *worker, tb_ops_t *ops)
                 rtck_wunlock(id1, range);
                 usleep(131);
             }
+
+            goto again;
         }
 
         dprint(3, "swapping %5d  [%7u %7u %7u]\n", worker->w_pid, id1, id2, range);
@@ -185,26 +192,36 @@ test_run(worker_t *worker, tb_ops_t *ops)
             tb_rec_t *r1 = (tb_rec_t *)((char *)r1_base + (i * cf.tb_rec_sz));
             tb_rec_t *r2 = (tb_rec_t *)((char *)r2_base + (i * cf.tb_rec_sz));
 
+            /* Verify each record's self-referential integrity.
+             */
             if (verify) {
                 ops->tb_verify(r1);
                 ops->tb_verify(r2);
             }
 
+            /* Verify each record's hash with the run-time check file.
+             */
             rtck_hash_verify(r1->tr_id, r1->tr_hash);
             rtck_hash_verify(r2->tr_id, r2->tr_hash);
 
-            r1->tr_id = id2 + i;
-            r2->tr_id = id1 + i;
-
+            /* Swap the record IDs, generate new hashes, and then copy
+             * the new hashes to the run-time check file.
+             */
             if (update) {
+                r1->tr_id = id2 + i;
+                r2->tr_id = id1 + i;
+
                 ops->tb_update(r1);
                 ops->tb_update(r2);
 
-                rtck_hash_put(r1->tr_id, r1->tr_hash);
-                rtck_hash_put(r2->tr_id, r2->tr_hash);
+                rtck_hash_set(r1->tr_id, r1->tr_hash);
+                rtck_hash_set(r2->tr_id, r2->tr_hash);
             }
         }
 
+        /* Write the in-core records from xfd1 to disk at xfd2 and
+         * vice versa (i.e., swap the two ranges of records).
+         */
         if (update) {
             worker->w_op = OP_PUT1;
             ops->tb_put(r1_base, range, xfd2);

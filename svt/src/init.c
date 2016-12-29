@@ -66,7 +66,7 @@ init_run(worker_t *worker, tb_ops_t *ops)
         stats->s_puts += 1;
 
         worker->w_op = OP_PUT2;
-        rtck_hash_put(r->tr_id, r->tr_hash);
+        rtck_hash_set(r->tr_id, r->tr_hash);
 
         worker->w_op = OP_CLOSE;
         ops->tb_close(xfd);

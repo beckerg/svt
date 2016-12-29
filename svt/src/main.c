@@ -102,10 +102,6 @@ clp_option_t optionv[] = {
       .convert = clp_cvt_int, .cvtdst = rangev.data,
       .cvtparms = &rangev, .after = rangev_after },
 
-    { .optopt = 'S', .argname = "swpct", .longopt = "swpct",
-      .help = "specify the percent of swap puts to gets",
-      .convert = clp_cvt_int, .cvtdst = &cf.cf_swaps_pct, },
-
     { .optopt = 's', .argname = "statsecs", .longopt = "stats",
       .help = "print status every statsecs seconds",
       .convert = clp_cvt_int, .cvtdst = &cf.cf_status_interval, },
@@ -113,6 +109,10 @@ clp_option_t optionv[] = {
     { .optopt = 't', .argname = "testsecs", .longopt = "test",
       .help = "run in test mode for testsecs seconds",
       .convert = clp_cvt_time_t, .cvtdst = &cf.cf_runtime_max, },
+
+    { .optopt = 'w', .argname = "swpct", .longopt = "swpct",
+      .help = "specify the percent of swap puts to gets",
+      .convert = clp_cvt_int, .cvtdst = &cf.cf_swaps_pct, },
 
     CLP_OPTION_END
 };

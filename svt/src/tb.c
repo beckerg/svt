@@ -45,15 +45,8 @@ static tb_close_t       tb_close_file;
 static tb_get_t         tb_get_file;
 static tb_put_t         tb_put_file;
 
-static tb_open_t        tb_open_dev;
-static tb_close_t       tb_close_dev;
-static tb_get_t         tb_get_dev;
-static tb_put_t         tb_put_dev;
-
 static tb_open_t        tb_open_dir;
 static tb_close_t       tb_close_dir;
-static tb_get_t         tb_get_dir;
-static tb_put_t         tb_put_dir;
 
 static tb_ops_t tb_ops_dir = {
     .tb_open = tb_open_dir,
@@ -76,22 +69,28 @@ static tb_ops_t tb_ops_file = {
 };
 
 static tb_ops_t tb_ops_dev = {
-    .tb_open = tb_open_dev,
-    .tb_close = tb_close_dev,
+    .tb_open = tb_open_file,
+    .tb_close = tb_close_file,
     .tb_init = tb_init_generic,
-    .tb_get = tb_get_dev,
-    .tb_put = tb_put_dev,
+    .tb_get = tb_get_file,
+    .tb_put = tb_put_file,
     .tb_update = tb_update_generic,
     .tb_verify = tb_verify_generic,
 };
 
 static tb_fd_t *xfd_file;
-static tb_fd_t *xfd_dev;
 
 
+/* Get a pointer to the path based operations object and initialize
+ * the global configuration appropriately.
+ *
+ * Note:  Due to the side-effect of modifying the global config
+ * this function is not thread-safe (and doesn't need to be...)
+ */
 tb_ops_t *
 tb_find(const char *path)
 {
+    char errbuf[64];
     struct stat sb;
     int rc;
 
@@ -99,7 +98,8 @@ tb_find(const char *path)
 
     rc = stat(path, &sb);
     if (rc) {
-        eprint("%s: stat(%s): %s\n", __func__, path, strerror(errno));
+        eprint("%s: stat(%s): %s\n",
+               __func__, path, strerror_r(errno, errbuf, sizeof(errbuf)));
         exit(EX_USAGE);
     }
 
@@ -142,27 +142,32 @@ tb_find(const char *path)
         return &tb_ops_dev;
     }
 
-    eprint("%s_find(%s): no testbed ops\n", __func__, path);
+    eprint("%s: no testbed ops for path %s (st_mode=%0u)\n",
+           __func__, path, sb.st_mode);
     exit(EX_USAGE);
 
-    return NULL;
+    /* NOTREACHED */
 }
 
 
 static tb_fd_t *
 tb_open_generic(const char *path, int flags, uint32_t rec_id)
 {
+    char errbuf[64];
     tb_fd_t *xfd;
 
-    xfd = malloc(sizeof(*xfd));
+    xfd = calloc(1, sizeof(*xfd));
     if (!xfd) {
-        abort();
+        eprint("%s: unable to alloc a testbed fd\n",
+               __func__, strerror_r(errno, errbuf, sizeof(errbuf)));
+        exit(EX_OSERR);
     }
 
     xfd->tf_fd = open(path, flags, 0644);
 
     if (xfd->tf_fd == -1) {
-        eprint("%s: open(%s, %lx): %s\n", __func__, path, flags, strerror(errno));
+        eprint("%s: open(%s, %lx): %s\n",
+               __func__, path, flags, strerror_r(errno, errbuf, sizeof(errbuf)));
         exit(EX_OSERR);
     }
 
@@ -236,8 +241,9 @@ tb_verify_generic(tb_rec_t *r)
     if (r->tr_hash[0] != hash_saved[0] ||
         r->tr_hash[1] != hash_saved[1]) {
 
-        eprint("%s: hash mismatch %lx vs %lx, %lx vs %lx\n",
-               __func__, r->tr_hash[0], hash_saved[0],
+        eprint("%s: record %u hash mismatch %lx vs %lx, %lx vs %lx\n",
+               __func__, r->tr_id,
+               r->tr_hash[0], hash_saved[0],
                r->tr_hash[1], hash_saved[1]);
         abort();
         exit(EX_DATAERR);
@@ -246,6 +252,13 @@ tb_verify_generic(tb_rec_t *r)
 
 
 /* Directory operations...
+ */
+
+/* Open a file within the test bed directory.
+ *
+ * If the test bed is a directory, then it contains a small and limited
+ * number of subdirectories over which all the files in the test bed
+ * are distributed (there is one file per record ID in the test bed).
  */
 static tb_fd_t *
 tb_open_dir(const char *path, int flags, uint32_t rec_id)
@@ -259,7 +272,18 @@ tb_open_dir(const char *path, int flags, uint32_t rec_id)
 }
 
 
-/* File operations...
+/* File/device operations...
+ */
+
+/* Open a file or device, or acquire a reference to an already open file.
+ *
+ * Note that in the interest of simplicity and efficiency only one file
+ * can be open at a time (which is all that is currently required).
+ *
+ * To make this thread-safe and allow any number of file to be open
+ * at the same time we'd have to employ a lookup mechanism.  Since this
+ * program only ever needs to have one file open at a time such a
+ * mechanism would be pure unnecessary overhead.
  */
 static tb_fd_t *
 tb_open_file(const char *path, int flags, uint32_t rec_id)
@@ -273,7 +297,6 @@ tb_open_file(const char *path, int flags, uint32_t rec_id)
 
     return xfd_file;
 }
-
 
 static void
 tb_close_file(tb_fd_t *xfd)
@@ -291,6 +314,7 @@ tb_close_file(tb_fd_t *xfd)
 static int
 tb_get_file(tb_rec_t *r, uint32_t rec_id, int n, tb_fd_t *xfd)
 {
+    char errbuf[64];
     ssize_t cc;
 
     cc = pread(xfd->tf_fd, r, cf.tb_rec_sz * n, rec_id * cf.tb_rec_sz);
@@ -299,7 +323,8 @@ tb_get_file(tb_rec_t *r, uint32_t rec_id, int n, tb_fd_t *xfd)
         const char *msg = "EOF";
 
         if (cc == -1) {
-            msg = strerror(errno);
+            strerror_r(errno, errbuf, sizeof(errbuf));
+            msg = errbuf;
         }
         else if (cc > 0) {
             msg = "short read";
@@ -316,6 +341,7 @@ tb_get_file(tb_rec_t *r, uint32_t rec_id, int n, tb_fd_t *xfd)
 static int
 tb_put_file(tb_rec_t *r, int n, tb_fd_t *xfd)
 {
+    char errbuf[64];
     ssize_t cc;
 
     cc = pwrite(xfd->tf_fd, r, cf.tb_rec_sz * n, r->tr_id * cf.tb_rec_sz);
@@ -324,87 +350,8 @@ tb_put_file(tb_rec_t *r, int n, tb_fd_t *xfd)
         const char *msg = "EOF";
 
         if (cc == -1) {
-            msg = strerror(errno);
-        }
-        else if (cc > 0) {
-            msg = "short write";
-        }
-
-        eprint("%s: pwrite(%d, %p, %zd, %ld) failed: cc=%ld %s\n",
-               __func__, xfd->tf_fd, r, cf.tb_rec_sz * n, r->tr_id * cf.tb_rec_sz, cc, msg);
-        abort();
-    }
-
-    return 0;
-}
-
-
-/* blk/chr device operations...
- */
-static tb_fd_t *
-tb_open_dev(const char *path, int flags, uint32_t rec_id)
-{
-    if (xfd_dev) {
-        xfd_dev->tf_opencnt += 1;
-    }
-    else {
-        xfd_dev = tb_open_generic(path, flags, rec_id);
-    }
-
-    return xfd_dev;
-}
-
-
-static void
-tb_close_dev(tb_fd_t *xfd)
-{
-    assert(xfd);
-    assert(xfd == xfd_dev);
-
-    if (xfd->tf_fd >= 0 && --xfd->tf_opencnt == 0) {
-        xfd_dev = NULL;
-        close(xfd->tf_fd);
-        free(xfd);
-    }
-}
-
-static int
-tb_get_dev(tb_rec_t *r, uint32_t rec_id, int n, tb_fd_t *xfd)
-{
-    ssize_t cc;
-
-    cc = pread(xfd->tf_fd, r, cf.tb_rec_sz * n, rec_id * cf.tb_rec_sz);
-
-    if (cc != cf.tb_rec_sz * n) {
-        const char *msg = "EOF";
-
-        if (cc == -1) {
-            msg = strerror(errno);
-        }
-        else if (cc > 0) {
-            msg = "short read";
-        }
-
-        eprint("%s: pread(%d, %p, %zd, %ld) failed: cc=%ld %s\n",
-               __func__, xfd->tf_fd, r, cf.tb_rec_sz * n, rec_id * cf.tb_rec_sz, cc, msg);
-        abort();
-    }
-
-    return 0;
-}
-
-static int
-tb_put_dev(tb_rec_t *r, int n, tb_fd_t *xfd)
-{
-    ssize_t cc;
-
-    cc = pwrite(xfd->tf_fd, r, cf.tb_rec_sz * n, r->tr_id * cf.tb_rec_sz);
-
-    if (cc != cf.tb_rec_sz * n) {
-        const char *msg = "EOF";
-
-        if (cc == -1) {
-            msg = strerror(errno);
+            strerror_r(errno, errbuf, sizeof(errbuf));
+            msg = errbuf;
         }
         else if (cc > 0) {
             msg = "short write";
