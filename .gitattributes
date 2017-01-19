@@ -2,6 +2,6 @@ svt/bootstrap         linguist-language=sh
 svt/configure         linguist-language=sh
 svt/config.status     linguist-language=sh
 svt/config.log        linguist-language=txt
-svt/config            linguist-vendored
-svt/autom4te.cache/   linguist-vendored
-svt/ports             linguist-vendored
+svt/config/*          linguist-vendored
+svt/autom4te.cache/*  linguist-vendored
+svt/ports/*           linguist-vendored
