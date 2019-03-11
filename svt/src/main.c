@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2006,2011,2015,2016 Greg Becker.  All rights reserved.
+ * Copyright (c) 2001-2006,2011,2015,2016,2019 Greg Becker.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -46,8 +46,8 @@ bool fcheck = false;
 bool verify = true;
 char *cf_dir;
 
-FILE *dprint_stream;
-FILE *eprint_stream;
+FILE *dprint_fp;
+FILE *eprint_fp;
 
 CLP_VECTOR(rangev, u_int, 2, ",-:");
 
@@ -138,8 +138,8 @@ main(int argc, char **argv)
     progname = strrchr(argv[0], '/');
     progname = (progname ? progname + 1 : argv[0]);
 
-    dprint_stream = stdout;
-    eprint_stream = stderr;
+    dprint_fp = stdout;
+    eprint_fp = stderr;
 
     (void)initstate(time(NULL), state, sizeof(state));
 
@@ -181,7 +181,6 @@ main(int argc, char **argv)
     return 0;
 }
 
-
 /* Debug print.  Usually called indirectly via the dprint() macro.
  */
 void
@@ -190,17 +189,15 @@ dprint_impl(int lvl, const char *func, int line, const char *fmt, ...)
     char msg[256];
     va_list ap;
 
-    msg[0] = '\000';
-
-    if (verbosity > 1) {
-        (void)snprintf(msg, sizeof(msg), "%s:%-4d ", func, line);
-    }
-
     va_start(ap, fmt);
-    vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), fmt, ap);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    fputs(msg, dprint_stream);
+    if (verbosity > 1) {
+        fprintf(dprint_fp, "%s:%-4d  %s", func, line, msg);
+    } else {
+        fprintf(dprint_fp, "%s", msg);
+    }
 }
 
 
@@ -212,11 +209,9 @@ eprint(const char *fmt, ...)
     char msg[256];
     va_list ap;
 
-    (void)snprintf(msg, sizeof(msg), "%s(%d): ", progname, getpid());
-
     va_start(ap, fmt);
-    vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), fmt, ap);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    fputs(msg, eprint_stream);
+    fprintf(eprint_fp, "%s(%d): %s", progname, getpid(), msg);
 }
