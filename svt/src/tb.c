@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2006,2015,2016 Greg Becker.  All rights reserved.
+ * Copyright (c) 2001-2006,2015,2016,2019 Greg Becker.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -155,6 +155,7 @@ tb_open_generic(const char *path, int flags, uint32_t rec_id)
 {
     char errbuf[64];
     tb_fd_t *xfd;
+    bool odirect;
 
     xfd = calloc(1, sizeof(*xfd));
     if (!xfd) {
@@ -163,12 +164,25 @@ tb_open_generic(const char *path, int flags, uint32_t rec_id)
         exit(EX_OSERR);
     }
 
+    odirect = (flags & O_DIRECT);
+
+  again:
     xfd->tf_fd = open(path, flags, 0644);
 
     if (xfd->tf_fd == -1) {
+        if (flags & O_DIRECT) {
+            flags &= ~O_DIRECT;
+            goto again;
+        }
+
         eprint("%s: open(%s, %lx): %s\n",
                __func__, path, flags, strerror_r(errno, errbuf, sizeof(errbuf)));
         exit(EX_OSERR);
+    }
+
+    if (odirect && !(flags & O_DIRECT)) {
+        eprint("%s: open(%s, %lx): O_DIRECT not supported\n",
+               __func__, path, flags);
     }
 
     xfd->tf_opencnt = 1;
