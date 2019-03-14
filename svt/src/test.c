@@ -87,7 +87,6 @@ test_run(worker_t *worker, tb_ops_t *ops)
     range_min = cf.cf_range_min;
 
     flags = MAP_ANONYMOUS | MAP_PRIVATE;
-    flags |= MAP_ALIGNED_SUPER;
     prot = PROT_READ | PROT_WRITE;
 
     r1_sz = cf.tb_rec_sz * range_max;

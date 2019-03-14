@@ -95,6 +95,6 @@
 #include <math.h>
 
 #define XALIGNMASK(x, a)   ((a) - 1)
-#define XALIGN(x, a)       (((__uintptr_t)(x) + XALIGNMASK(x, a)) & ~XALIGNMASK(x, a))
+#define XALIGN(x, a)       (((uintptr_t)(x) + XALIGNMASK(x, a)) & ~XALIGNMASK(x, a))
 
 #endif /* SYSTEM_H */
