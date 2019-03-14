@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2006,2011,2015 Greg Becker.  All rights reserved.
+ * Copyright (c) 2001-2006,2011,2015,2019 Greg Becker.  All rights reserved.
  */
 #ifndef PROG_H
 #define PROG_H
@@ -44,13 +44,15 @@ do {                                                                \
     }                                                               \
 } while (0);
 
-extern void dprint_impl(int lvl, const char *func, int line, const char *fmt, ...);
+extern void dprint_impl(int lvl, const char *func, int line, const char *fmt, ...)
+    __attribute__((format (printf, 4, 5)));
 
 
 /* You should call eprint() to print error messages that should always be shown.
  * It simply prints the given message preceded by the program name.
  */
-extern void eprint(const char *fmt, ...);
+extern void eprint(const char *fmt, ...)
+    __attribute__((format (printf, 1, 2)));
 
 
 #endif /* PROG_H */

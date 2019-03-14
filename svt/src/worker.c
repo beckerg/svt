@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015,2016 Greg Becker.  All rights reserved.
+ * Copyright (c) 2015,2016,2019 Greg Becker.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -21,8 +21,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $Id$
  */
 
 #include "system.h"
@@ -80,16 +78,16 @@ worker_status(const char *mode, worker_t *worker, struct timeval *tv_tzero, stru
 {
     ulong tot_gets, tot_puts, tot_msecs;
     ulong itv_gets, itv_puts, itv_msecs;
+    ulong tot_getbytes, tot_putbytes;
     struct timeval tv_now, tv_diff;
     ulong msecs;
     bool once;
     int i;
 
-    /* Stabilize the active stats.
+    /* Make a frozen copy of the active stats.
      */
     for (i = 0; i < cf.cf_jobs_max; ++i) {
-        worker[i].w_fstats.s_gets = worker[i].w_astats.s_gets;
-        worker[i].w_fstats.s_puts = worker[i].w_astats.s_puts;
+        worker[i].w_fstats = worker[i].w_astats;
     }
 
     once = (verbosity > 0);
@@ -98,11 +96,14 @@ worker_status(const char *mode, worker_t *worker, struct timeval *tv_tzero, stru
     }
 
     if (once) {
-        printf("\n%-5s %3s %6s %4s %3s %7s %7s %7s %10s %10s %10s %10s\n",
+        printf("\n%-5s %3s %6s %4s %3s %7s %7s %7s %10s %10s %8s %8s %10s %10s\n",
                "MODE", "TID", "PID", "S", "C", "OP",
-               "iGETS", "iPUTS", "tGETS", "tPUTS", "MSECS", "EPOCH");
+               "iGETS", "iPUTS", "tGETS", "tPUTS",
+               "tGETMB", "tPUTMB",
+               "MSECS", "TIME");
     }
 
+    tot_getbytes = tot_putbytes = 0;
     tot_gets = tot_puts = 0;
     itv_gets = itv_puts = 0;
 
@@ -126,6 +127,8 @@ worker_status(const char *mode, worker_t *worker, struct timeval *tv_tzero, stru
         stats = &worker->w_fstats;
         tot_gets += stats->s_gets;
         tot_puts += stats->s_puts;
+        tot_getbytes += stats->s_getbytes;
+        tot_putbytes += stats->s_putbytes;
 
         /* Compute interval ops for this worker.
          */
@@ -160,16 +163,18 @@ worker_status(const char *mode, worker_t *worker, struct timeval *tv_tzero, stru
             }
         }
 
-        printf("%-5s %3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
+        printf("%-5s %3d %6d %4s %3u %7s %7lu %7lu %10lu %10lu %8lu %8lu %10ld %10ld\n",
                mode, i, worker->w_pid, status, code, op2txt[worker->w_op],
-               gets, puts, stats->s_gets, stats->s_puts, itv_msecs,
-               worker->w_stop.tv_sec);
+               gets, puts, stats->s_gets, stats->s_puts,
+               stats->s_getbytes >> 20, stats->s_putbytes >> 20,
+               itv_msecs, worker->w_stop.tv_sec);
     }
 
-    printf("%-5s %3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %10ld %10ld\n",
-           mode, "all", getpid(), "-", 0, "total",
-           itv_gets, itv_puts, tot_gets, tot_puts, tot_msecs,
-           tv_now.tv_sec);
+    printf("%-5s %3s %6d %4s %3u %7s %7lu %7lu %10lu %10lu %8lu %8lu %10ld %10ld\n",
+           mode, "all", getpid(), "-", 0, "-",
+           itv_gets, itv_puts, tot_gets, tot_puts,
+           tot_getbytes >> 20, tot_putbytes >> 20,
+           tot_msecs, tv_now.tv_sec);
 }
 
 void
@@ -198,20 +203,24 @@ worker_run(const char *mode, worker_init_t *init, worker_fini_t *fini, worker_ru
     initstate(time(NULL), rng_state, sizeof(rng_state));
 
     worker_base_sz = sizeof(*worker_base) * cf.cf_jobs_max;
+    worker_base_sz = XALIGN(worker_base_sz, 2 << 20);
 
     int flags = MAP_ANON | MAP_SHARED;
+    int prot = PROT_READ | PROT_WRITE;
 
-    worker_base = mmap(NULL, worker_base_sz, PROT_READ | PROT_WRITE, flags, -1, 0);
+    worker_base = mmap(NULL, worker_base_sz, prot, flags, -1, 0);
     if (worker_base == MAP_FAILED) {
         eprint("%s: mmap(): %s\n", __func__, strerror(errno));
         exit(EX_OSERR);
     }
 
     if ((uintptr_t)worker_base & (getpagesize() - 1)) {
-        eprint("%s: mmap returned non-page aligned address: %p\n", worker_base);
+        eprint("%s: mmap returned non-page aligned address: %p\n",
+               __func__, worker_base);
     }
     if (sizeof(*worker_base) & (getpagesize() - 1)) {
-        eprint("%s: sizeof(worker_t) not page aligned: %zu\n", sizeof(*worker_base));
+        eprint("%s: sizeof(worker_t) not page aligned: %zu\n",
+               __func__, sizeof(*worker_base));
     }
 
     setpriority(PRIO_PROCESS, 0, -10);

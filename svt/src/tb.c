@@ -98,8 +98,7 @@ tb_find(const char *path)
 
     rc = stat(path, &sb);
     if (rc) {
-        eprint("%s: stat(%s): %s\n",
-               __func__, path, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: stat(%s): %s\n", __func__, path, strerror(errno));
         exit(EX_USAGE);
     }
 
@@ -159,8 +158,7 @@ tb_open_generic(const char *path, int flags, uint32_t rec_id)
 
     xfd = calloc(1, sizeof(*xfd));
     if (!xfd) {
-        eprint("%s: unable to alloc a testbed fd\n",
-               __func__, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: unable to alloc a testbed fd\n", __func__);
         exit(EX_OSERR);
     }
 
@@ -175,14 +173,12 @@ tb_open_generic(const char *path, int flags, uint32_t rec_id)
             goto again;
         }
 
-        eprint("%s: open(%s, %lx): %s\n",
-               __func__, path, flags, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: open(%s, 0x%x): %s\n", __func__, path, flags, strerror(errno));
         exit(EX_OSERR);
     }
 
     if (odirect && !(flags & O_DIRECT)) {
-        eprint("%s: open(%s, %lx): O_DIRECT not supported\n",
-               __func__, path, flags);
+        dprint(1, "open(%s, 0x%x): O_DIRECT not supported\n", path, flags);
     }
 
     xfd->tf_opencnt = 1;
@@ -241,7 +237,7 @@ tb_verify_generic(tb_rec_t *r)
     uint64_t hash_saved[2];
     rtck_t   rtck;
 
-    dprint(4, "%08x %7u %016lx.%016lx\n",
+    dprint(4, "%08lx %7u %016lx.%016lx\n",
            r->tr_magic, r->tr_id, r->tr_hash[0], r->tr_hash[1]);
 
     hash_saved[0] = r->tr_hash[0];
@@ -344,7 +340,7 @@ tb_get_file(tb_rec_t *r, uint32_t rec_id, int n, tb_fd_t *xfd)
             msg = "short read";
         }
 
-        eprint("%s: pread(%d, %p, %zd, %ld) failed: cc=%ld %s\n",
+        eprint("%s: pread(%d, %p, %u, %d) failed: cc=%ld %s\n",
                __func__, xfd->tf_fd, r, cf.tb_rec_sz * n, rec_id * cf.tb_rec_sz, cc, msg);
         abort();
     }
@@ -371,7 +367,7 @@ tb_put_file(tb_rec_t *r, int n, tb_fd_t *xfd)
             msg = "short write";
         }
 
-        eprint("%s: pwrite(%d, %p, %zd, %ld) failed: cc=%ld %s\n",
+        eprint("%s: pwrite(%d, %p, %u, %d) failed: cc=%ld %s\n",
                __func__, xfd->tf_fd, r, cf.tb_rec_sz * n, r->tr_id * cf.tb_rec_sz, cc, msg);
         abort();
     }

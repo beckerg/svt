@@ -21,8 +21,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * $Id$
  */
 
 #include "system.h"
@@ -78,30 +76,32 @@ test_run(worker_t *worker, tb_ops_t *ops)
     tb_rec_t *r1_base, *r2_base;
     time_t runtime_max;
     uint64_t xstate[2];
-    size_t alignment;
+    int flags, prot;
     uint range_max;
     uint range_min;
+    size_t r1_sz;
     int rc;
     int i;
 
     range_max = cf.cf_range_max;
     range_min = cf.cf_range_min;
 
-    alignment = 32 * 1024;
+    flags = MAP_ANONYMOUS | MAP_PRIVATE;
+    flags |= MAP_ALIGNED_SUPER;
+    prot = PROT_READ | PROT_WRITE;
 
-    rc = posix_memalign((void **)&r1_base, alignment, cf.tb_rec_sz * range_max);
-    if (rc) {
-        eprint("unable to get %zu-bytes of %zu-byte aligned memory\n",
-               cf.tb_rec_sz * range_max, alignment);
+    r1_sz = cf.tb_rec_sz * range_max;
+    r1_sz = XALIGN(r1_sz, 1 << 20) * 2;
+
+    r1_base = mmap(NULL, r1_sz, prot, flags, -1, 0);
+
+    if (r1_base == MAP_FAILED) {
+        eprint("unable to mmap %zu-bytes: %s\n",
+               r1_sz, strerror(errno));
         abort();
     }
 
-    rc = posix_memalign((void **)&r2_base, alignment, cf.tb_rec_sz * range_max);
-    if (rc) {
-        eprint("unable to get %zu-bytes of %zu-byte aligned memory\n",
-               cf.tb_rec_sz * range_max, alignment);
-        abort();
-    }
+    r2_base = (void *)r1_base + r1_sz / 2;
 
     gettimeofday(&worker->w_start, NULL);
     worker->w_stop = worker->w_start;
@@ -185,6 +185,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
         ops->tb_get(r2_base, id2, range, xfd2);
 
         stats->s_gets += 2;
+        stats->s_getbytes += range * cf.tb_rec_sz * 2;
 
         worker->w_op = OP_VERIFY;
 
@@ -230,6 +231,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
             ops->tb_put(r2_base, range, xfd1);
 
             stats->s_puts += 2;
+            stats->s_putbytes += range * cf.tb_rec_sz * 2;
         }
 
         worker->w_op = OP_CLOSE;
@@ -258,8 +260,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
 
     gettimeofday(&worker->w_stop, NULL);
 
-    free(r1_base);
-    free(r2_base);
+    munmap(r1_base, r1_sz);
 }
 
 void

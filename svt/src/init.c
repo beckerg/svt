@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015,2016 Greg Becker.  All rights reserved.
+ * Copyright (c) 2015,2016,2019 Greg Becker.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -45,7 +45,7 @@ init_run(worker_t *worker, tb_ops_t *ops)
 
     r = malloc(cf.tb_rec_sz);
     if (!r) {
-        eprint("%s: malloc(%ld): out of memory\n", __func__, cf.tb_rec_sz);
+        eprint("%s: malloc(%u): out of memory\n", __func__, cf.tb_rec_sz);
         exit(EX_OSERR);
     }
 

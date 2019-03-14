@@ -77,7 +77,7 @@ rtck_create(void)
     }
 
     if (-1 == ftruncate(rtck_fd, len)) {
-        eprint("%s: ftruncate(%s, %lld): %s\n", __func__, rtck_path, len, strerror(errno));
+        eprint("%s: ftruncate(%s, %ld): %s\n", __func__, rtck_path, len, strerror(errno));
         exit(EX_OSERR);
     }
 
@@ -106,15 +106,13 @@ rtck_open(void)
 
     rtck_fd = open(rtck_path, O_RDWR);
     if (-1 == rtck_fd) {
-        eprint("%s: open(%s): %s\n",
-               __func__, rtck_path, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: open(%s): %s\n", __func__, rtck_path, strerror(errno));
         exit(EX_OSERR);
     }
 
     rc = fstat(rtck_fd, &sb);
     if (rc) {
-        eprint("%s: fstat(%s): %s\n",
-               __func__, rtck_path, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: fstat(%s): %s\n", __func__, rtck_path, strerror(errno));
         exit(EX_OSERR);
     }
 
@@ -130,8 +128,7 @@ rtck_open(void)
                      PROT_READ | PROT_WRITE, MAP_SHARED, rtck_fd, 0);
 
     if (rtck_base == MAP_FAILED) {
-        eprint("%s: mmap(%s): %s\n",
-               __func__, rtck_path, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: mmap(%s): %s\n", __func__, rtck_path, strerror(errno));
         exit(EX_OSERR);
     }
 }
@@ -234,8 +231,7 @@ rtck_wlock(uint32_t rec_id, int range)
             return errno;
         }
 
-        eprint("%s: fcntl(%d, F_SETLK): %s\n",
-               __func__, rtck_fd, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: fcntl(%d, F_SETLK): %s\n", __func__, rtck_fd, strerror(errno));
 
         if (errno == EINTR) {
             goto retry;
@@ -265,8 +261,7 @@ rtck_wunlock(uint32_t rec_id, int range)
 
     rc = fcntl(rtck_fd, F_SETLK, &lk);
     if (rc) {
-        eprint("%s: fcntl(%d, F_SETLK): %s\n",
-               __func__, rtck_fd, strerror_r(errno, errbuf, sizeof(errbuf)));
+        eprint("%s: fcntl(%d, F_SETLK): %s\n", __func__, rtck_fd, strerror(errno));
 
         if (errno == EINTR) {
             goto retry;

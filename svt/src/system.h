@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2006,2015 Greg Becker.  All rights reserved.
+ * Copyright (c) 2001-2006,2015,2019 Greg Becker.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -93,5 +93,8 @@
 #include <sys/time.h>
 #include <sys/poll.h>
 #include <math.h>
+
+#define XALIGNMASK(x, a)   ((a) - 1)
+#define XALIGN(x, a)       (((__uintptr_t)(x) + XALIGNMASK(x, a)) & ~XALIGNMASK(x, a))
 
 #endif /* SYSTEM_H */
