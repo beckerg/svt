@@ -51,68 +51,67 @@ FILE *eprint_fp;
 
 CLP_VECTOR(rangev, u_int, 2, ",-:");
 
-static void
-rangev_after(struct clp_option_s *option)
+static int
+rangev_after(struct clp_option *option)
 {
     u_int *resultv = option->cvtdst;
 
     cf.cf_range_min = resultv[0];
     cf.cf_range_max = resultv[1];
+
+    return 0;
 }
 
-clp_posparam_t posparamv[] = {
-    { .name = "testbed",
-      .help = "path to the testbed",
-      .convert = clp_cvt_string, .cvtdst = &cf.tb_path, },
-
-    CLP_PARAM_END
+struct clp_posparam posparamv[] = {
+    CLP_POSPARAM("testbed", string, cf.tb_path, NULL, NULL, "path to testbed"),
+    CLP_POSPARAM_END
 };
 
-clp_option_t optionv[] = {
-    CLP_OPTION_VERBOSE(verbosity),
+struct clp_option optionv[] = {
+    CLP_OPTION_VERBOSITY(verbosity),
     CLP_OPTION_VERSION(version),
     CLP_OPTION_HELP,
 
     { .optopt = 'C', .argname = "cfdir", .longopt = "conf",
       .help = "specify the config file directory",
-      .convert = clp_cvt_string, .cvtdst = &cf_dir, },
+      .cvtfunc = clp_cvt_string, .cvtdst = &cf_dir, },
 
     { .optopt = 'c', .longopt = "check",
       .help = "check the testbed for errors",
-      .convert = clp_cvt_bool, .cvtdst = &fcheck, },
+      .cvtfunc = clp_cvt_bool, .cvtdst = &fcheck, },
 
     { .optopt = 'H', .longopt = "no-headers",
       .help = "suppress column headers",
-      .convert = clp_cvt_bool, .cvtdst = &headers, },
+      .cvtfunc = clp_cvt_bool, .cvtdst = &headers, },
 
     { .optopt = 'i', .argname = "maxrecs", .longopt = "init",
       .help = "specify the size of the testbed (in records)",
-      .convert = clp_cvt_int, .cvtdst = &cf.tb_rec_max, },
+      .cvtfunc = clp_cvt_int, .cvtdst = &cf.tb_rec_max, },
 
     { .optopt = 'j', .argname = "maxjobs", .longopt = "jobs",
       .help = "specify the maximum number of worker processes",
-      .convert = clp_cvt_int, .cvtdst = &cf.cf_jobs_max, },
+      .cvtfunc = clp_cvt_int, .cvtdst = &cf.cf_jobs_max, },
 
     { .optopt = 'R', .longopt = "no-verify",
       .help = "disable read verification in test mode",
-      .convert = clp_cvt_bool, .cvtdst = &verify, },
+      .cvtfunc = clp_cvt_bool, .cvtdst = &verify, },
 
     { .optopt = 'r', .argname = "range", .longopt = "range",
       .help = "specify the min[,max] number of records per swap",
-      .convert = clp_cvt_int, .cvtdst = rangev.data,
+      .cvtfunc = clp_cvt_int, .cvtdst = rangev.data,
       .cvtparms = &rangev, .after = rangev_after },
 
     { .optopt = 's', .argname = "statsecs", .longopt = "stats",
       .help = "print status every statsecs seconds",
-      .convert = clp_cvt_int, .cvtdst = &cf.cf_status_interval, },
+      .cvtfunc = clp_cvt_int, .cvtdst = &cf.cf_status_interval, },
 
     { .optopt = 't', .argname = "testsecs", .longopt = "test",
       .help = "run in test mode for testsecs seconds",
-      .convert = clp_cvt_time_t, .cvtdst = &cf.cf_runtime_max, },
+      .cvtfunc = clp_cvt_time_t, .cvtdst = &cf.cf_runtime_max, },
 
     { .optopt = 'w', .argname = "swpct", .longopt = "swpct",
       .help = "specify the percent of swap puts to gets",
-      .convert = clp_cvt_int, .cvtdst = &cf.cf_swaps_pct, },
+      .cvtfunc = clp_cvt_int, .cvtdst = &cf.cf_swaps_pct, },
 
     CLP_OPTION_END
 };
@@ -120,15 +119,12 @@ clp_option_t optionv[] = {
 bool
 given(int c)
 {
-    clp_option_t *opt = clp_option_find(optionv, c);
-
-    return (opt && opt->given > 0);
+    return !!clp_given(c, optionv, NULL);
 }
 
 int
 main(int argc, char **argv)
 {
-    char errbuf[128];
     char state[256];
     int optind;
     int i, c;
@@ -143,9 +139,8 @@ main(int argc, char **argv)
 
     (void)initstate(time(NULL), state, sizeof(state));
 
-    rc = clp_parsev(argc, argv, optionv, posparamv, errbuf, sizeof(errbuf), &optind);
+    rc = clp_parsev(argc, argv, optionv, posparamv);
     if (rc) {
-        fprintf(stderr, "%s: %s\n", progname, errbuf);
         exit(rc);
     }
 
