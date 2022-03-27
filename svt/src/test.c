@@ -76,6 +76,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
     tb_rec_t *r1_base, *r2_base;
     time_t runtime_max;
     uint64_t xstate[2];
+    uint64_t swaps_pct;
     int flags, prot;
     uint range_max;
     uint range_min;
@@ -121,6 +122,10 @@ test_run(worker_t *worker, tb_ops_t *ops)
 
     xoroshiro128plus_init(xstate, random());
 
+    /* Scale swaps_pct to eliminate modulo operation when using it.
+     */
+    swaps_pct = ((uint64_t)cf.cf_swaps_pct << 32) / 100;
+
     while (1) {
         tb_fd_t *xfd1, *xfd2;
         uint32_t id1, id2;
@@ -152,7 +157,7 @@ test_run(worker_t *worker, tb_ops_t *ops)
         /* Try to get an exclusive lock over each range.  No locking
          * is required if we're not swapping.
          */
-        while (cf.cf_swaps_pct > 0) {
+        while (swaps_pct > 0) {
             worker->w_op = OP_WLOCK1;
             if (0 == rtck_wlock(id1, range)) {
                 worker->w_op = OP_WLOCK2;
@@ -169,9 +174,10 @@ test_run(worker_t *worker, tb_ops_t *ops)
             goto again;
         }
 
-        dprint(3, "swapping %5d  [%7u %7u %7u]\n", worker->w_pid, id1, id2, range);
+        update = ((xoroshiro128plus(xstate) >> 32) < swaps_pct);
 
-        update = ((xoroshiro128plus(xstate) % 100) < cf.cf_swaps_pct);
+        dprint(3, "swapping %5d  [%7u %7u %7u] %d\n",
+               worker->w_pid, id1, id2, range, update);
 
         worker->w_op = OP_OPEN;
         xfd1 = ops->tb_open(cf.tb_path, O_RDWR, id1);
@@ -237,11 +243,13 @@ test_run(worker_t *worker, tb_ops_t *ops)
         ops->tb_close(xfd2);
         ops->tb_close(xfd1);
 
-        worker->w_op = OP_WUNLOCK1;
-        rtck_wunlock(id2, range);
+        if (swaps_pct > 0) {
+            worker->w_op = OP_WUNLOCK1;
+            rtck_wunlock(id2, range);
 
-        worker->w_op = OP_WUNLOCK2;
-        rtck_wunlock(id1, range);
+            worker->w_op = OP_WUNLOCK2;
+            rtck_wunlock(id1, range);
+        }
 
         worker->w_op = OP_LOOP;
 

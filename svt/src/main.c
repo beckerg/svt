@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2006,2011,2015,2016,2019 Greg Becker.  All rights reserved.
+ * Copyright (c) 2001-2006,2011,2015,2016,2019,2022 Greg Becker.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -126,7 +126,6 @@ int
 main(int argc, char **argv)
 {
     char state[256];
-    int optind;
     int i, c;
     char *pc;
     int rc;
@@ -151,9 +150,6 @@ main(int argc, char **argv)
         eprint("one of -c, -i, or -t must be given, use -h for help\n");
         exit(EX_USAGE);
     }
-
-    argc -= optind;
-    argv += optind;
 
 #if !HAVE_MMAP
     if (given('m')) {
